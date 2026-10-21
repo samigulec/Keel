@@ -160,6 +160,19 @@ struct SafetyPolicyTests {
         #expect(sandbox.policy.evaluate(link) == .allowed)
     }
 
+    @Test func allowsRootCreatedAfterPolicyThroughSymlinkedHome() throws {
+        let sandbox = try Sandbox()
+        // Like /var -> /private/var on macOS: home is reached through a link,
+        // and Downloads does not exist yet when the policy is built.
+        let linkedHome = sandbox.outside.appendingPathComponent("linked-home")
+        try FileManager.default.createSymbolicLink(at: linkedHome, withDestinationURL: sandbox.home)
+        let policy = SafetyPolicy.standard(home: linkedHome)
+
+        let file = try sandbox.file("Downloads/installer.dmg")
+        #expect(policy.evaluate(file) == .allowed)
+        #expect(policy.evaluate(linkedHome.appendingPathComponent("Downloads/installer.dmg")) == .allowed)
+    }
+
     @Test func deniesSystemLocations() throws {
         let policy = SafetyPolicy.standard(home: URL(fileURLWithPath: "/Users/nobody"))
         for path in ["/System", "/usr/bin", "/bin"] where FileManager.default.fileExists(atPath: path) {

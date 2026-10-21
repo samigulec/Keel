@@ -100,9 +100,17 @@ public struct SafetyPolicy: Sendable {
 
     // MARK: - Path helpers
 
+    /// Resolves symlinks in the deepest existing ancestor and appends the rest,
+    /// so a root that does not exist yet (e.g. DerivedData before the first
+    /// Xcode build) still matches once it is created.
     static func canonicalPath(_ url: URL) -> String {
-        let lexical = url.standardizedFileURL.path
-        return realPath(lexical) ?? lexical
+        var existing = url.standardizedFileURL.path
+        var missing: [String] = []
+        while realPath(existing) == nil, existing != "/" {
+            missing.insert((existing as NSString).lastPathComponent, at: 0)
+            existing = (existing as NSString).deletingLastPathComponent
+        }
+        return missing.reduce(realPath(existing) ?? existing, join)
     }
 
     static func realPath(_ path: String) -> String? {
