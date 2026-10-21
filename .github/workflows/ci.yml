@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+jobs:
+  core-linux:
+    name: KeelCore tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path Packages/KeelCore
+
+  app-macos:
+    name: App build + tests (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: KeelCore tests
+        run: swift test --package-path Packages/KeelCore
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build app
+        run: |
+          xcodebuild build \
+            -project Keel.xcodeproj \
+            -scheme Keel \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO

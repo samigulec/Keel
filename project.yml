@@ -1,0 +1,44 @@
+name: Keel
+
+options:
+  bundleIdPrefix: com.samigulec
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  KeelCore:
+    path: Packages/KeelCore
+
+targets:
+  Keel:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - "Resources/Fonts"
+          - "Resources/Fonts/**"
+      - path: App/Resources/Fonts
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: KeelCore
+    settings:
+      base:
+        PRODUCT_NAME: Keel
+        PRODUCT_BUNDLE_IDENTIFIER: com.samigulec.Keel
+        INFOPLIST_FILE: Support/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Support/Keel.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        # Local development: "Sign to Run Locally". Developer ID comes with Phase 4.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: NO
