@@ -33,7 +33,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .smartScan, .cleanup, .performance: 1
         case .applications: 2
-        case .assistant: 4
+        case .assistant: 1
         }
     }
 }

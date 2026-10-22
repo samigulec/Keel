@@ -8,14 +8,25 @@ struct RootView: View {
             Sidebar(selection: $selection)
                 .frame(width: 244)
 
-            ScrollView {
-                detail
-                    .padding(.horizontal, 48)
-                    .padding(.top, 40)
-                    .padding(.bottom, 48)
-                    .frame(maxWidth: 1100, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if selection == .assistant {
+                    // The chat scrolls its own messages and keeps the input bar in view.
+                    AssistantView()
+                        .padding(.horizontal, 40)
+                        .padding(.top, 40)
+                        .padding(.bottom, 32)
+                } else {
+                    ScrollView {
+                        detail
+                            .padding(.horizontal, 48)
+                            .padding(.top, 40)
+                            .padding(.bottom, 48)
+                            .frame(maxWidth: 1100, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.mist)
         }
         .ignoresSafeArea()

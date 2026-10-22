@@ -23,7 +23,8 @@ final class CleanupModel {
     private(set) var runningAppNames: [String: String] = [:]
 
     private let status: SystemStatus
-    @ObservationIgnored private var scanTask: Task<Void, Never>?
+    /// The scan in progress; the screen and Keel AI share it instead of starting a second one.
+    @ObservationIgnored private var inFlightScan: Task<[CategoryScanResult], Never>?
 
     init(status: SystemStatus) {
         self.status = status
@@ -66,7 +67,24 @@ final class CleanupModel {
     }
 
     func scan() {
-        guard !isBusy else { return }
+        _ = startScan()
+    }
+
+    /// Scans and returns once results are in; used by Keel AI's tools.
+    @discardableResult
+    func scanAndWait() async -> [CategoryScanResult] {
+        await startScan().value
+    }
+
+    func cancelScan() {
+        inFlightScan?.cancel()
+    }
+
+    private func startScan() -> Task<[CategoryScanResult], Never> {
+        if let inFlightScan { return inFlightScan }
+        let current = results
+        guard phase != .cleaning else { return Task { current } }
+
         phase = .scanning
         errorMessage = nil
         lastReport = nil
@@ -77,7 +95,7 @@ final class CleanupModel {
             uniquingKeysWith: { first, _ in first }
         )
         let context = ScanContext(runningBundleIDs: Set(runningAppNames.keys))
-        scanTask = Task {
+        let task = Task {
             do {
                 // The scan's work runs in child tasks off the main actor, and
                 // awaiting it directly lets cancelScan() reach them.
@@ -92,28 +110,33 @@ final class CleanupModel {
                 errorMessage = error.localizedDescription
                 phase = results.isEmpty ? .idle : .ready
             }
+            inFlightScan = nil
+            return results
         }
-    }
-
-    func cancelScan() {
-        scanTask?.cancel()
+        inFlightScan = task
+        return task
     }
 
     func cleanSelection() {
-        guard phase == .ready else { return }
+        Task { await cleanSelectionAndWait() }
+    }
+
+    /// Removes the selected categories and returns the report once done.
+    @discardableResult
+    func cleanSelectionAndWait() async -> CleanupReport? {
+        guard phase == .ready else { return nil }
         let items = selectedResults.flatMap(\.items)
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty else { return nil }
         phase = .cleaning
 
-        Task {
-            let report = await Task.detached(priority: .userInitiated) {
-                CleanupExecutor.standard().perform(items)
-            }.value
-            let cleaned = Set(report.removed)
-            results = results.map { $0.removing(cleaned) }
-            lastReport = report
-            phase = .ready
-            status.refresh()
-        }
+        let report = await Task.detached(priority: .userInitiated) {
+            CleanupExecutor.standard().perform(items)
+        }.value
+        let cleaned = Set(report.removed)
+        results = results.map { $0.removing(cleaned) }
+        lastReport = report
+        phase = .ready
+        status.refresh()
+        return report
     }
 }
