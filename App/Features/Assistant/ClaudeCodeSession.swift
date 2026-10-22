@@ -105,7 +105,7 @@ final class ClaudeCodeSession: ChatSession {
         let detail = failure.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowered = detail.lowercased()
         if lowered.contains("login") || lowered.contains("log in") || lowered.contains("auth") {
-            return "Claude hesabına giriş gerekiyor. Bağlantı ayarlarından \\"Giriş yap\\"a bas."
+            return "Claude hesabına giriş gerekiyor. Bağlantı ayarlarından \"Giriş yap\"a bas."
         }
         if lowered.contains("limit") {
             return "Claude kullanım sınırına ulaşıldı: \(detail.prefix(200))"

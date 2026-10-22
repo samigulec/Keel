@@ -3,6 +3,11 @@ import Foundation
 public struct ProcessFailure: Error, Equatable, Sendable {
     public let status: Int32
     public let standardError: String
+
+    public init(status: Int32, standardError: String) {
+        self.status = status
+        self.standardError = standardError
+    }
 }
 
 /// Runs a command and streams its standard output line by line.
