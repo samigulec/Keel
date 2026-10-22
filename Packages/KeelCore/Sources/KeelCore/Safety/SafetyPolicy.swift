@@ -13,14 +13,14 @@ import Glibc
 /// allowed roots, must not touch a protected location, and must not reach its
 /// target through a symbolic link or onto another volume.
 public struct SafetyPolicy: Sendable {
-    public enum Verdict: Equatable, Sendable {
+    public enum Verdict: Hashable, Sendable {
         case allowed
         case denied(DenialReason)
 
         public var isAllowed: Bool { self == .allowed }
     }
 
-    public enum DenialReason: Equatable, Sendable, CustomStringConvertible {
+    public enum DenialReason: Hashable, Sendable, CustomStringConvertible {
         case notFileURL
         case doesNotExist
         case outsideAllowedRoots
