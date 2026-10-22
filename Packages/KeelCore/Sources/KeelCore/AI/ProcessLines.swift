@@ -52,7 +52,8 @@ public enum ProcessLines {
         _ executable: URL,
         arguments: [String],
         environment: [String: String]? = nil,
-        currentDirectory: URL? = nil
+        currentDirectory: URL? = nil,
+        mergingStandardError: Bool = false
     ) throws -> AsyncThrowingStream<String, any Error> {
         let process = Process()
         process.executableURL = executable
@@ -61,7 +62,8 @@ public enum ProcessLines {
         if let currentDirectory { process.currentDirectoryURL = currentDirectory }
         let box = Box(process: process, output: Pipe(), error: Pipe())
         process.standardOutput = box.output
-        process.standardError = box.error
+        // Some tools print what matters, like a sign-in link, to stderr.
+        process.standardError = mergingStandardError ? box.output : box.error
         process.standardInput = FileHandle.nullDevice
         try process.run()
 
@@ -73,15 +75,17 @@ public enum ProcessLines {
         // Drain stderr separately so a chatty process cannot block on a full
         // pipe; the group lets the stdout reader wait for all of it.
         let stderrDrained = DispatchGroup()
-        stderrDrained.enter()
-        DispatchQueue.global(qos: .utility).async {
-            let handle = box.error.fileHandleForReading
-            while true {
-                let data = handle.availableData
-                if data.isEmpty { break }
-                box.appendError(data)
+        if !mergingStandardError {
+            stderrDrained.enter()
+            DispatchQueue.global(qos: .utility).async {
+                let handle = box.error.fileHandleForReading
+                while true {
+                    let data = handle.availableData
+                    if data.isEmpty { break }
+                    box.appendError(data)
+                }
+                stderrDrained.leave()
             }
-            stderrDrained.leave()
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -116,11 +120,19 @@ public enum ProcessLines {
         _ executable: URL,
         arguments: [String],
         environment: [String: String]? = nil,
-        currentDirectory: URL? = nil
+        currentDirectory: URL? = nil,
+        mergingStandardError: Bool = false
     ) async throws -> (status: Int32, output: String) {
         var lines: [String] = []
         do {
-            for try await line in try stream(executable, arguments: arguments, environment: environment, currentDirectory: currentDirectory) {
+            let output = try stream(
+                executable,
+                arguments: arguments,
+                environment: environment,
+                currentDirectory: currentDirectory,
+                mergingStandardError: mergingStandardError
+            )
+            for try await line in output {
                 lines.append(line)
             }
             return (0, lines.joined(separator: "\n"))

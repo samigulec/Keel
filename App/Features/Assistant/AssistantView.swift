@@ -3,7 +3,6 @@ import SwiftUI
 
 struct AssistantView: View {
     @Environment(AssistantModel.self) private var model
-    @State private var managingModels = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
@@ -16,36 +15,15 @@ struct AssistantView: View {
                     ScrollView { ConnectCard() }
                 } else {
                     Conversation()
-                    Composer { managingModels = true }
+                    Composer()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if model.connection != nil {
-                Aside { managingModels = true }
-                    .frame(width: 290)
+                Aside()
+                    .frame(width: 300)
             }
-        }
-        .sheet(isPresented: $managingModels) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("AI modelleri")
-                        .font(.keel(20, .extraBold))
-                        .foregroundStyle(Palette.hull)
-                    Spacer()
-                    Button("Bitti") { managingModels = false }
-                        .buttonStyle(RowButtonStyle())
-                        .keyboardShortcut(.defaultAction)
-                }
-                ScrollView {
-                    ConnectionForm { managingModels = false }
-                }
-            }
-            .padding(28)
-            .frame(width: 640, height: 600)
-            .background(Palette.mist)
-            .environment(model)
-            .preferredColorScheme(.light)
         }
         .confirmationDialog(
             "\(ByteFormat.string(model.pendingBytes)) temizlensin mi?",
@@ -78,183 +56,31 @@ struct AssistantView: View {
     }
 }
 
-// MARK: - Provider marks
-
-/// The small square that stands for a provider. Keel draws its own marks:
-/// Anthropic's and OpenAI's logos need their written permission, so they can
-/// replace these in this one place if that is granted.
-struct ProviderMark: View {
-    enum Style {
-        case claude, chatGPT, apple, key
-    }
-
-    let style: Style
-    var size: CGFloat = 36
-
-    init(style: Style, size: CGFloat = 36) {
-        self.style = style
-        self.size = size
-    }
-
-    init(kind: AIConnection.Kind, size: CGFloat = 36) {
-        self.size = size
-        switch kind {
-        case .claudeCode, .claude: style = .claude
-        case .apple: style = .apple
-        case .openAICompatible: style = .key
-        }
-    }
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-            .fill(background)
-            .frame(width: size, height: size)
-            .overlay { glyph }
-            .accessibilityHidden(true)
-    }
-
-    private var background: Color {
-        switch style {
-        case .claude: Color(hex: 0xF6E7DC)
-        case .chatGPT: Color(hex: 0xE6ECEA)
-        case .apple: Color(hex: 0xEDE8F7)
-        case .key: Palette.mint
-        }
-    }
-
-    @ViewBuilder
-    private var glyph: some View {
-        switch style {
-        case .claude:
-            Text("C")
-                .font(.keel(size * 0.5, .extraBold))
-                .foregroundStyle(Color(hex: 0x9A4A2E))
-        case .chatGPT:
-            Text("G")
-                .font(.keel(size * 0.5, .extraBold))
-                .foregroundStyle(Palette.hull)
-        case .apple:
-            Image(systemName: "apple.intelligence")
-                .font(.system(size: size * 0.48, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x6B4FC4))
-        case .key:
-            Image(systemName: "key.fill")
-                .font(.system(size: size * 0.42, weight: .semibold))
-                .foregroundStyle(Palette.mintText)
-        }
-    }
-}
-
 // MARK: - Side panel
 
-/// Provider cards; a click switches straight to that provider.
 private struct Aside: View {
     @Environment(AssistantModel.self) private var model
-    let manageModels: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("AI modelleri").eyebrowStyle()
-            ForEach(model.quickConnections, id: \.keychainAccount) { option in
-                ProviderCard(option: option, isCurrent: isCurrent(option)) {
-                    if !isCurrent(option) { model.switchTo(option) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("AI modelleri").eyebrowStyle()
+                ProvidersPanel()
+
+                PrivacyNote(isLocal: model.connection?.isLocal == true)
+                    .padding(.top, 6)
+
+                Button {
+                    model.startNewChat()
+                } label: {
+                    Label("Yeni sohbet", systemImage: "plus.bubble")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.keelSecondary)
+                .disabled(model.items.isEmpty)
             }
-            Button(action: manageModels) {
-                Label("Model bağla ya da yönet", systemImage: "plus")
-                    .font(.keel(13, .bold))
-                    .foregroundStyle(Palette.mintText)
-                    .frame(maxWidth: .infinity, minHeight: 40)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Palette.controlBorder, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    }
-            }
-            .buttonStyle(.plain)
-
-            PrivacyNote(isLocal: model.connection?.isLocal == true)
-                .padding(.top, 8)
-
-            Button {
-                model.startNewChat()
-            } label: {
-                Label("Yeni sohbet", systemImage: "plus.bubble")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.keelSecondary)
-            .disabled(model.items.isEmpty)
         }
-    }
-
-    private func isCurrent(_ option: AIConnection) -> Bool {
-        guard let current = model.connection, current.kind == option.kind else { return false }
-        return option.kind != .openAICompatible || current.baseURL == option.baseURL
-    }
-}
-
-private struct ProviderCard: View {
-    @Environment(AssistantModel.self) private var model
-    let option: AIConnection
-    let isCurrent: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                ProviderMark(kind: option.kind, size: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.keel(15, .bold))
-                        .foregroundStyle(Palette.hull)
-                    Text(subtitle)
-                        .font(.keel(12, .medium))
-                        .foregroundStyle(Palette.slate)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if isCurrent {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Palette.keelGreen)
-                }
-            }
-            .padding(12)
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(isCurrent ? Palette.keelGreen : Palette.border, lineWidth: isCurrent ? 2 : 1)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isCurrent ? .isSelected : [])
-    }
-
-    private var title: String {
-        switch option.kind {
-        case .claudeCode: "Claude"
-        case .claude: "Claude API"
-        default: option.providerName
-        }
-    }
-
-    private var subtitle: String {
-        switch option.kind {
-        case .claudeCode:
-            let model = isCurrent ? currentModelName : "Opus 5.5"
-            return "\(model) · hesabınla"
-        case .claude:
-            return "\(isCurrent ? currentModelName : ModelNames.display(option.model)) · API anahtarı"
-        case .apple:
-            return "Cihazda · ücretsiz"
-        case .openAICompatible:
-            return option.model
-        }
-    }
-
-    private var currentModelName: String {
-        if let answered = model.stats.model { return ModelNames.display(answered) }
-        return model.connection?.modelName ?? ""
+        .scrollIndicators(.never)
     }
 }
 
@@ -508,7 +334,7 @@ private struct ProposalCard: View {
                     Button("Seçilenleri temizle (\(selected.count))") {
                         model.review(proposal, items: selected)
                     }
-                    .buttonStyle(RowButtonStyle(prominent: true))
+                    .buttonStyle(TileButtonStyle(prominent: true))
                     .disabled(selected.isEmpty)
                     Text(selected.contains { $0.removal == .deletePermanently }
                         ? "Çöp Kutusu'ndakiler kalıcı silinir"
@@ -568,15 +394,19 @@ private struct ConnectCard: View {
                     Text("Bir yapay zeka bağla")
                         .font(.keel(20, .extraBold))
                         .foregroundStyle(Palette.hull)
-                    Text("Claude hesabın, Apple Intelligence ya da kendi API anahtarın.")
+                    Text("ChatGPT ya da Claude hesabınla giriş yap, veya Mac'indeki Apple Intelligence'ı kullan.")
                         .font(.keel(14, .medium))
                         .foregroundStyle(Palette.slate)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            ConnectionForm()
+            ProvidersPanel()
+            Text("Giriş, sağlayıcının kendi sayfasında yapılır; Keel şifreni ya da oturum bilgilerini görmez, saklamaz.")
+                .font(.keel(12, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: 640, alignment: .leading)
+        .frame(maxWidth: 520, alignment: .leading)
     }
 }
 
@@ -614,7 +444,6 @@ private struct EmptyChat: View {
 /// The message box with the model picker, effort and usage above it.
 private struct Composer: View {
     @Environment(AssistantModel.self) private var model
-    let manageModels: () -> Void
 
     var body: some View {
         @Bindable var model = model
@@ -679,7 +508,7 @@ private struct Composer: View {
 
     @ViewBuilder
     private func controls(_ connection: AIConnection) -> some View {
-        ModelPicker(manageModels: manageModels)
+        ModelPicker()
         if connection.supportsEffort {
             EffortPicker(effort: connection.effort)
         }
@@ -712,13 +541,15 @@ private struct ChipLabel<Leading: View>: View {
 /// Provider column on the left, that provider's models by number on the right.
 private struct ModelPicker: View {
     @Environment(AssistantModel.self) private var model
-    let manageModels: () -> Void
 
     @State private var isOpen = false
-    @State private var browsing: AIConnection?
+    @State private var browsing: AIConnection.Kind = .claudeCode
 
     var body: some View {
-        Button { open() } label: {
+        Button {
+            browsing = model.connection?.kind ?? .claudeCode
+            isOpen = true
+        } label: {
             ChipLabel(text: title) {
                 if let kind = model.connection?.kind {
                     ProviderMark(kind: kind, size: 20)
@@ -732,42 +563,27 @@ private struct ModelPicker: View {
 
     private var title: String {
         guard let connection = model.connection else { return "Model" }
-        switch connection.kind {
-        case .apple:
-            return "Apple Intelligence"
-        case .claudeCode:
-            if connection.model == "default", let answered = model.stats.model {
-                return ModelNames.display(answered)
-            }
-            return connection.modelName
-        case .claude:
-            return ModelNames.display(connection.model)
-        case .openAICompatible:
-            return connection.model
+        if connection.kind == .apple { return "Apple Intelligence" }
+        if connection.usesAccountDefault, let answered = model.stats.model {
+            return ModelNames.display(answered)
         }
-    }
-
-    private func open() {
-        browsing = model.connection
-        isOpen = true
+        return connection.modelName
     }
 
     private var picker: some View {
-        let providers = model.quickConnections
-        let shown = browsing ?? model.connection ?? providers.first
-        return HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             VStack(spacing: 6) {
-                ForEach(providers, id: \.keychainAccount) { option in
-                    Button { browsing = option } label: {
-                        ProviderMark(kind: option.kind, size: 30)
+                ForEach(AssistantModel.providers, id: \.self) { kind in
+                    Button { browsing = kind } label: {
+                        ProviderMark(kind: kind, size: 30)
                             .padding(4)
                             .background(
-                                shown?.keychainAccount == option.keychainAccount ? Palette.track : .clear,
+                                browsing == kind ? Palette.track : .clear,
                                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                             )
                     }
                     .buttonStyle(.plain)
-                    .help(option.providerName)
+                    .help(AIConnection(kind: kind).providerName)
                 }
                 Spacer(minLength: 0)
             }
@@ -777,39 +593,50 @@ private struct ModelPicker: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("Model · \(shown?.providerName ?? "")").eyebrowStyle()
+                Text("Model · \(AIConnection(kind: browsing).providerName)").eyebrowStyle()
                     .padding(.horizontal, 14)
                     .padding(.top, 12)
                     .padding(.bottom, 6)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if let shown {
-                            ForEach(shown.modelChoices, id: \.id) { choice in
-                                modelRow(choice, in: shown)
+                if model.accounts.isReady(browsing) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(AIConnection(kind: browsing).modelChoices, id: \.id) { choice in
+                                modelRow(choice)
                             }
                         }
                     }
+                } else {
+                    notReady
                 }
-                Divider()
-                Button("AI modellerini yönet…") {
-                    isOpen = false
-                    manageModels()
-                }
-                .buttonStyle(.plain)
-                .font(.keel(13, .bold))
-                .foregroundStyle(Palette.mintText)
-                .padding(12)
             }
             .frame(width: 290)
         }
-        .frame(height: 400)
+        .frame(height: 420)
         .background(Palette.card)
     }
 
-    private func modelRow(_ choice: (id: String, name: String), in provider: AIConnection) -> some View {
-        let isCurrent = model.connection?.keychainAccount == provider.keychainAccount && model.connection?.model == choice.id
+    private var notReady: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(browsing == .apple
+                ? "Apple Intelligence bu Mac'te kullanılamıyor."
+                : "\(AIConnection(kind: browsing).providerName) modellerini kullanmak için önce hesabınla giriş yap.")
+                .font(.keel(13, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
+            if browsing != .apple, model.accounts.phase(browsing) == .signedOut {
+                Button("Giriş yap") { model.accounts.signIn(browsing) }
+                    .buttonStyle(TileButtonStyle(prominent: true))
+            }
+            Spacer()
+        }
+        .padding(14)
+    }
+
+    private func modelRow(_ choice: (id: String, name: String)) -> some View {
+        let isCurrent = model.connection?.kind == browsing && model.connection?.model == choice.id
         return Button {
-            select(choice.id, in: provider)
+            model.update(kind: browsing, model: choice.id)
+            isOpen = false
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "checkmark")
@@ -819,11 +646,12 @@ private struct ModelPicker: View {
                 Text(choice.name)
                     .font(.keel(14, isCurrent ? .bold : .medium))
                     .foregroundStyle(Palette.hull)
+                    .lineLimit(1)
                 Spacer(minLength: 8)
-                if choice.id == AIConnection.recommendedClaudeModel {
+                if AIConnection.recommendedModels.contains(choice.id) {
                     Pill(text: "ÖNERİLEN")
-                } else if provider.kind == .claudeCode, choice.id == AIConnection.claudeCodeAccountDefault {
-                    Pill(text: "HESAP VARSAYILANI", background: Palette.track, foreground: Palette.slate)
+                } else if choice.id == AIConnection.learnedDefault(for: browsing) {
+                    Pill(text: "VARSAYILAN", background: Palette.track, foreground: Palette.slate)
                 }
             }
             .padding(.horizontal, 14)
@@ -832,17 +660,6 @@ private struct ModelPicker: View {
         }
         .buttonStyle(.plain)
     }
-
-    private func select(_ modelID: String, in provider: AIConnection) {
-        if model.connection?.keychainAccount == provider.keychainAccount {
-            model.update(model: modelID)
-        } else {
-            var next = provider
-            next.model = modelID
-            model.switchTo(next)
-        }
-        isOpen = false
-    }
 }
 
 private struct EffortPicker: View {
@@ -850,9 +667,14 @@ private struct EffortPicker: View {
     let effort: String?
     @State private var isOpen = false
 
+    private var title: String {
+        guard let effort else { return "Otomatik" }
+        return AIConnection.effortLevels.first { $0.id == effort }?.name ?? effort
+    }
+
     var body: some View {
         Button { isOpen = true } label: {
-            ChipLabel(text: effort ?? "effort") {
+            ChipLabel(text: title) {
                 Image(systemName: "gauge.with.dots.needle.50percent")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Palette.slate)
@@ -865,17 +687,17 @@ private struct EffortPicker: View {
                 Text("Düşünme seviyesi").eyebrowStyle()
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                row(id: nil, name: "Varsayılan", detail: "Sağlayıcının ayarı")
+                row(id: nil, name: "Otomatik", detail: "Hesabın ayarı")
                 ForEach(AIConnection.effortLevels, id: \.id) { level in
-                    row(id: level.id, name: level.id, detail: level.detail)
+                    row(id: level.id, name: level.name, detail: level.detail)
                 }
-                Text("Yükseldikçe yanıt daha özenli olur ama daha yavaş gelir ve daha çok kullanım harcar.")
+                Text("Yükseldikçe yanıt daha özenli olur ama daha yavaş gelir ve planından daha çok kullanır.")
                     .font(.keel(11, .medium))
                     .foregroundStyle(Palette.slate)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(14)
             }
-            .frame(width: 260)
+            .frame(width: 270)
             .background(Palette.card)
         }
     }
@@ -891,7 +713,7 @@ private struct EffortPicker: View {
                     .foregroundStyle(Palette.keelGreen)
                     .opacity(effort == id ? 1 : 0)
                 Text(name)
-                    .font(.keelMono(13, effort == id ? .semibold : .medium))
+                    .font(.keel(14, effort == id ? .bold : .medium))
                     .foregroundStyle(Palette.hull)
                 Spacer()
                 Text(detail)
@@ -932,18 +754,21 @@ private struct StatsLine: View {
     }
 
     private var costText: String {
-        if connection.isLocal { return "ücretsiz" }
-        guard let cost = stats.costUSD else { return "maliyet —" }
-        if cost > 0, cost < 0.01 { return "<$0,01" }
-        return "≈$" + String(format: "%.2f", cost).replacingOccurrences(of: ".", with: ",")
+        switch connection.kind {
+        case .apple: return "ücretsiz"
+        case .chatGPT: return "ChatGPT planınla"
+        case .claudeCode:
+            guard let cost = stats.costUSD else { return "Claude planınla" }
+            if cost > 0, cost < 0.01 { return "<$0,01" }
+            return "≈$" + String(format: "%.2f", cost).replacingOccurrences(of: ".", with: ",")
+        }
     }
 
     private var costHelp: String {
         switch connection.kind {
         case .claudeCode: "Claude Code'un API fiyatlarıyla tahmini. Aboneliğinden ayrıca ücret alınmaz; kullanım limitlerine sayılır."
-        case .claude: "Liste fiyatlarıyla tahmini; asıl fatura Anthropic'ten gelir."
+        case .chatGPT: "ChatGPT planının Codex kullanımına sayılır; ayrıca ücret alınmaz."
         case .apple: "Cihazda çalışır, ücretsizdir."
-        case .openAICompatible: "Bu sağlayıcı maliyet bilgisi vermiyor."
         }
     }
 }

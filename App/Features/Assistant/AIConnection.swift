@@ -1,134 +1,113 @@
 import Foundation
 import KeelCore
 
-/// Which AI the user connected. The API key is kept in the Keychain, not here.
+/// Which AI Keel AI talks to. Every option uses the user's own account or
+/// their Mac; Keel holds no keys or credentials.
 struct AIConnection: Codable, Equatable {
-    enum Kind: String, Codable {
-        /// Apple's on-device model: no key, no account, nothing leaves the Mac.
-        case apple
-        /// The user's own Claude account, through the Claude Code tool they installed.
+    enum Kind: String, Codable, CaseIterable {
+        /// The user's ChatGPT account, through the Codex tool they installed.
+        case chatGPT
+        /// The user's Claude account, through the Claude Code tool they installed.
         case claudeCode
-        case claude
-        case openAICompatible
+        /// Apple's on-device model: no account, nothing leaves the Mac.
+        case apple
     }
 
-    /// How hard the model thinks; more effort is slower and costs more.
-    static let effortLevels: [(id: String, detail: String)] = [
-        ("low", "Hızlı ve kısa"),
-        ("medium", "Dengeli"),
-        ("high", "Özenli"),
-        ("xhigh", "Çok özenli"),
-        ("max", "En derin, en yavaş"),
+    /// The model id that means "whatever the account uses by default".
+    static let accountDefault = "default"
+
+    /// How hard the model thinks; more effort is slower and uses more of the plan.
+    static let effortLevels: [(id: String, name: String, detail: String)] = [
+        ("low", "Düşük", "Hızlı ve kısa"),
+        ("medium", "Orta", "Dengeli"),
+        ("high", "Yüksek", "Özenli"),
+        ("xhigh", "Çok yüksek", "Çok özenli"),
+        ("max", "En yüksek", "En derin, en yavaş"),
     ]
 
-    /// Claude models offered by number, newest first. Keel recommends the first.
+    /// Claude models by number, newest first.
     static let claudeModelIDs = [
         "claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-haiku-5-5",
         "claude-opus-5", "claude-sonnet-5", "claude-fable-5",
         "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
     ]
-    static let recommendedClaudeModel = "claude-opus-5-5"
 
-    /// The model Claude Code uses when Keel does not pick one, learned from
-    /// its answers, so the picker can mark it.
-    static var claudeCodeAccountDefault: String? {
-        get { UserDefaults.standard.string(forKey: "keel.ai.claudeCode.accountDefault") }
-        set { UserDefaults.standard.set(newValue, forKey: "keel.ai.claudeCode.accountDefault") }
-    }
+    /// ChatGPT models Codex offers, in Codex's own order.
+    static let chatGPTModelIDs = [
+        "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
+        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
+    ]
+
+    static let recommendedModels: Set<String> = ["claude-opus-5-5", "gpt-6.1-sol"]
 
     var kind: Kind
     var model: String
-    /// OpenAI-compatible only: the preset the user started from and its endpoint.
-    var presetID: String?
-    var baseURL: String?
     /// nil keeps the provider's default.
     var effort: String?
 
-    var supportsEffort: Bool { kind == .claude || kind == .claudeCode }
-
-    /// Models the picker offers for this kind of connection, as (id, name).
-    var modelChoices: [(id: String, name: String)] {
-        switch kind {
-        case .apple:
-            return [("on-device", "Cihazdaki model")]
-        case .claudeCode:
-            let accountDefault = Self.claudeCodeAccountDefault.map { " (\(ModelNames.display($0)))" } ?? ""
-            return [("default", "Hesabın varsayılanı" + accountDefault)]
-                + Self.claudeModelIDs.map { ($0, ModelNames.display($0)) }
-        case .claude:
-            return Self.claudeModelIDs.map { ($0, ModelNames.display($0)) }
-        case .openAICompatible:
-            return [(model, model)]
-        }
+    init(kind: Kind, model: String = AIConnection.accountDefault, effort: String? = nil) {
+        self.kind = kind
+        self.model = model
+        self.effort = effort
     }
 
-    static let claudeDefault = AIConnection(kind: .claude, model: AnthropicBackend.defaultModel)
     static let apple = AIConnection(kind: .apple, model: "on-device")
 
-    var keychainAccount: String {
-        switch kind {
-        case .apple: "apple"
-        case .claudeCode: "claude-code"
-        case .claude: "anthropic"
-        case .openAICompatible: "openai-compatible:\(baseURL ?? "")"
-        }
-    }
+    var supportsEffort: Bool { kind != .apple }
 
-    var needsKey: Bool {
-        switch kind {
-        case .apple, .claudeCode: false
-        case .claude: true
-        case .openAICompatible: preset?.needsKey ?? true
-        }
-    }
+    /// Runs on this Mac: nothing is sent to a server.
+    var isLocal: Bool { kind == .apple }
 
-    var preset: OpenAICompatibleBackend.Preset? {
-        OpenAICompatibleBackend.presets.first { $0.id == presetID }
+    var usesAccountDefault: Bool { model == Self.accountDefault }
+
+    /// Models the picker offers for this provider, as (id, name).
+    var modelChoices: [(id: String, name: String)] {
+        let numbered: [String]
+        switch kind {
+        case .apple: return [("on-device", "Cihazdaki model")]
+        case .claudeCode: numbered = Self.claudeModelIDs
+        case .chatGPT: numbered = Self.chatGPTModelIDs
+        }
+        let learned = Self.learnedDefault(for: kind).map { " (\(ModelNames.display($0)))" } ?? ""
+        return [(Self.accountDefault, "Hesabın varsayılanı" + learned)]
+            + numbered.map { ($0, ModelNames.display($0)) }
     }
 
     var providerName: String {
         switch kind {
+        case .chatGPT: "ChatGPT"
+        case .claudeCode: "Claude"
         case .apple: "Apple Intelligence"
-        case .claudeCode: "Claude hesabı"
-        case .claude: "Claude API"
-        case .openAICompatible: preset?.name ?? "OpenAI uyumlu"
         }
     }
 
     var modelName: String {
-        if kind == .apple { return "Cihaz üzerinde" }
-        if kind == .claudeCode {
-            return model == "default" ? "Hesabın varsayılanı" : ModelNames.display(model)
-        }
-        if kind == .claude { return ModelNames.display(model) }
-        return model
-    }
-
-    /// Runs on this Mac: nothing is sent to a server.
-    var isLocal: Bool {
-        kind == .apple || (baseURL.map { $0.contains("localhost") || $0.contains("127.0.0.1") } ?? false)
-    }
-
-    func backend(apiKey: String?) throws -> any ChatBackend {
         switch kind {
-        case .apple, .claudeCode:
-            throw AIError.invalidResponse("\(providerName) HTTP üzerinden çalışmaz")
-        case .claude:
-            var backend = AnthropicBackend(apiKey: apiKey ?? "", model: model)
-            if let effort { backend.effort = effort }
-            return backend
-        case .openAICompatible:
-            guard let baseURL, let url = URL(string: baseURL) else {
-                throw AIError.invalidResponse("Geçersiz sunucu adresi")
+        case .apple: "Cihazdaki model"
+        case .claudeCode, .chatGPT:
+            if usesAccountDefault {
+                Self.learnedDefault(for: kind).map(ModelNames.display) ?? "Hesabın varsayılanı"
+            } else {
+                ModelNames.display(model)
             }
-            return OpenAICompatibleBackend(baseURL: url, apiKey: apiKey, model: model)
         }
+    }
+
+    /// The model the account answers with when Keel does not pick one,
+    /// learned from its answers so the picker can name it.
+    static func learnedDefault(for kind: Kind) -> String? {
+        UserDefaults.standard.string(forKey: "keel.ai.\(kind.rawValue).accountDefault")
+    }
+
+    static func setLearnedDefault(_ model: String, for kind: Kind) {
+        UserDefaults.standard.set(model, forKey: "keel.ai.\(kind.rawValue).accountDefault")
     }
 
     // MARK: Persistence
 
     private static let defaultsKey = "keel.ai.connection"
 
+    /// The saved choice; one from an older Keel that no longer exists reads as none.
     static func load() -> AIConnection? {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return nil }
         return try? JSONDecoder().decode(AIConnection.self, from: data)
@@ -138,9 +117,5 @@ struct AIConnection: Codable, Equatable {
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: Self.defaultsKey)
         }
-    }
-
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: defaultsKey)
     }
 }

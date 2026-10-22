@@ -116,10 +116,13 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - Sistem logları, DNS önbelleği, Spotlight yeniden dizinleme, disk doğrulama
 
 ### Keel AI (öne alındı, ilk sürüm hazır)
-- Kullanıcı kendi yapay zekasını bağlar: Claude (varsayılan Claude Opus 5.5)
-  ya da OpenAI uyumlu servisler (OpenAI, Gemini, OpenRouter, Ollama, LM Studio)
-- API anahtarı Keychain'de; yalnızca özet sistem verileri gönderilir, dosya
-  içeriği asla
+- Kullanıcı kendi hesabıyla bağlanır: ChatGPT (Codex CLI üzerinden), Claude
+  (Claude Code üzerinden) ya da cihazdaki Apple Intelligence. API anahtarı yok.
+- Giriş sağlayıcının kendi akışında yapılır; Keel kimlik bilgisi görmez ya da
+  saklamaz. Yalnızca özet sistem verileri gönderilir, dosya içeriği asla.
+- Public sürümden önce: Anthropic ve OpenAI koşullarının üçüncü taraf
+  uygulamada bu kullanıma izin verdiğini yeniden doğrula; resmi logolar için
+  yazılı izin gerekir.
 - Asistan araçlarla gerçek veriye bakar; temizlik yalnızca kart olarak
   önerilir ve kullanıcı onaylamadan hiçbir şey yapılmaz
 - Sonra: sohbet geçmişini saklama, daha fazla araç (büyük dosyalar,

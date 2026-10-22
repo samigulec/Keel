@@ -44,6 +44,8 @@ struct ClaudeCodeTests {
         #expect(ModelNames.display("claude-haiku-4-5-20251001") == "Haiku 4.5")
         #expect(ModelNames.display("claude-fable-5-1") == "Fable 5.1")
         #expect(ModelNames.display("llama3.2") == "llama3.2")
+        #expect(ModelNames.display("gpt-6.1-sol") == "GPT-6.1 Sol")
+        #expect(ModelNames.display("gpt-5.5") == "GPT-5.5")
     }
 
     @Test func hidesProposalBlockSplitAcrossChunks() {
@@ -80,5 +82,53 @@ struct ClaudeCodeTests {
         let result = try await ProcessLines.run(URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "echo 'giriş yok' >&2; exit 1"])
         #expect(result.status == 1)
         #expect(result.output.contains("giriş yok"))
+    }
+
+    @Test func mergedErrorOutputArrivesAsLines() async throws {
+        let result = try await ProcessLines.run(
+            URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "echo 'Logged in using ChatGPT' >&2"],
+            mergingStandardError: true
+        )
+        #expect(result.status == 0)
+        #expect(result.output == "Logged in using ChatGPT")
+    }
+}
+
+@Suite("Codex integration")
+struct CodexTests {
+    @Test func readsThreadAnswerAndUsage() {
+        var parser = CodexStreamParser()
+        let lines = [
+            #"{"type":"thread.started","thread_id":"0199a213-81c0-7800-8aa1-bbab2a035a53"}"#,
+            #"{"type":"turn.started"}"#,
+            #"{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"Pil verisine bakıyorum"}}"#,
+            #"{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Pilin **%87** sağlıkta."}}"#,
+            #"{"type":"turn.completed","usage":{"input_tokens":2400,"cached_input_tokens":0,"output_tokens":120,"reasoning_output_tokens":40}}"#,
+        ]
+        let events = lines.flatMap { parser.consume($0) }
+        #expect(events == [
+            .started(threadID: "0199a213-81c0-7800-8aa1-bbab2a035a53"),
+            .text("Pilin **%87** sağlıkta."),
+            .usage(TurnUsage(contextTokens: 2520)),
+        ])
+    }
+
+    @Test func reportsFailuresWithCodexMessage() {
+        var parser = CodexStreamParser()
+        _ = parser.consume(#"{"type":"error","message":"Reconnecting... 1/5"}"#)
+        #expect(parser.lastError == "Reconnecting... 1/5")
+        let events = parser.consume(#"{"type":"turn.failed","error":{"message":"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account."}}"#)
+        #expect(events == [.failed("The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.")])
+        #expect(parser.consume("not json").isEmpty)
+    }
+
+    @Test func recognisesErrorsKeelCanActOn() {
+        #expect(CLIErrorText.isModelUnavailable("The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account."))
+        #expect(CLIErrorText.isModelUnavailable("There's an issue with the selected model (claude-opus-5-5). It may not exist or you may not have access to it."))
+        #expect(CLIErrorText.isModelUnavailable(#"API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-x"}}"#))
+        #expect(!CLIErrorText.isModelUnavailable("Overloaded"))
+        #expect(CLIErrorText.needsLogin("Not logged in · Please run /login"))
+        #expect(CLIErrorText.isUsageLimit("You've hit your usage limit."))
     }
 }

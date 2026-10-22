@@ -63,12 +63,9 @@ final class AssistantModel {
         self.status = status
         self.cleanup = cleanup
         self.performance = performance
-        let saved = AIConnection.load()
-        // A saved connection whose key has gone (e.g. removed in Keychain Access) is not usable.
-        if let saved, !saved.needsKey || KeychainStore.read(account: saved.keychainAccount) != nil,
-           saved.kind != .apple || AppleIntelligence.isAvailable {
+        if let saved = AIConnection.load(), saved.kind != .apple || AppleIntelligence.isAvailable {
             connection = saved
-        } else if saved == nil, AppleIntelligence.isAvailable {
+        } else if AppleIntelligence.isAvailable {
             // Nothing to set up: start with the free on-device model.
             connection = .apple
         }
@@ -76,21 +73,19 @@ final class AssistantModel {
 
     // MARK: Connection
 
-    func connect(_ connection: AIConnection, apiKey: String?) throws {
-        if let apiKey, !apiKey.isEmpty {
-            try KeychainStore.save(apiKey, account: connection.keychainAccount)
-        }
-        connection.save()
-        self.connection = connection
-        startNewChat()
-    }
+    /// Sign-in state of ChatGPT and Claude.
+    let accounts = Accounts()
 
-    func disconnect() {
-        if let connection {
-            KeychainStore.delete(account: connection.keychainAccount)
-        }
-        AIConnection.clear()
-        connection = nil
+    /// The providers in the order the panel shows them.
+    static let providers: [AIConnection.Kind] = [.chatGPT, .claudeCode, .apple]
+
+    /// Switches provider. A conversation cannot move between providers, so
+    /// this starts a new chat.
+    func use(_ kind: AIConnection.Kind) {
+        guard connection?.kind != kind else { return }
+        let next = kind == .apple ? AIConnection.apple : AIConnection(kind: kind)
+        next.save()
+        connection = next
         startNewChat()
     }
 
@@ -104,9 +99,10 @@ final class AssistantModel {
         isRunning = false
     }
 
-    /// Picks another model or effort for the same provider. The conversation
-    /// carries on; the next message uses the new setting.
-    func update(model: String? = nil, effort: String?? = nil) {
+    /// Picks another model or effort. Within the same provider the
+    /// conversation carries on and the next message uses the new setting.
+    func update(kind: AIConnection.Kind? = nil, model: String? = nil, effort: String?? = nil) {
+        if let kind, kind != connection?.kind { use(kind) }
         guard var connection else { return }
         if let model { connection.model = model }
         if let effort { connection.effort = effort }
@@ -114,32 +110,10 @@ final class AssistantModel {
         self.connection = connection
         stats.model = nil
 
-        if let engine = session as? AssistantEngine {
-            let key = connection.needsKey ? KeychainStore.read(account: connection.keychainAccount) : nil
-            if let backend = try? connection.backend(apiKey: key) {
-                engine.replaceBackend(backend)
-            }
-        } else if let claude = session as? ClaudeCodeSession {
-            claude.modelAlias = connection.model == "default" ? nil : connection.model
-            claude.effort = connection.effort
+        if let account = session as? AccountSession {
+            account.model = connection.usesAccountDefault ? nil : connection.model
+            account.effort = connection.effort
         }
-    }
-
-    /// Switches provider. A conversation cannot move between providers, so
-    /// this starts a new chat.
-    func switchTo(_ connection: AIConnection) {
-        try? connect(connection, apiKey: nil)
-    }
-
-    /// Providers the chat box can switch to without setting anything up.
-    var quickConnections: [AIConnection] {
-        var result: [AIConnection] = [AIConnection(kind: .claudeCode, model: AIConnection.recommendedClaudeModel)]
-        if AppleIntelligence.isAvailable { result.append(.apple) }
-        if KeychainStore.read(account: AIConnection.claudeDefault.keychainAccount) != nil {
-            result.append(.claudeDefault)
-        }
-        if let connection, connection.kind == .openAICompatible { result.append(connection) }
-        return result
     }
 
     // MARK: Conversation
@@ -191,19 +165,7 @@ final class AssistantModel {
         }
 
         let session: any ChatSession
-        if connection.kind == .claudeCode {
-            let proposeTool = tools.first { $0.definition.name == "propose_cleanup" }
-            session = ClaudeCodeSession(
-                modelAlias: connection.model == "default" ? nil : connection.model,
-                effort: connection.effort,
-                gatherContext: { [status, cleanup, performance] report in
-                    await KeelContext.gather(status: status, cleanup: cleanup, performance: performance, report: report)
-                },
-                propose: { input in
-                    _ = try? await proposeTool?.run(input)
-                }
-            )
-        } else if isOnDevice {
+        if connection.kind == .apple {
             guard let apple = AppleIntelligence.makeSession(
                 tools: tools,
                 instructions: Self.systemPrompt + Self.onDeviceAddendum,
@@ -216,12 +178,27 @@ final class AssistantModel {
             }
             session = apple
         } else {
-            let key = connection.needsKey ? KeychainStore.read(account: connection.keychainAccount) : nil
-            session = AssistantEngine(
-                backend: try connection.backend(apiKey: key),
-                transport: URLSessionTransport(),
-                systemPrompt: Self.systemPrompt,
-                tools: tools
+            let proposeTool = tools.first { $0.definition.name == "propose_cleanup" }
+            session = AccountSession(
+                kind: connection.kind,
+                model: connection.usesAccountDefault ? nil : connection.model,
+                effort: connection.effort,
+                gatherContext: { [status, cleanup, performance] report in
+                    await KeelContext.gather(status: status, cleanup: cleanup, performance: performance, report: report)
+                },
+                propose: { input in
+                    _ = try? await proposeTool?.run(input)
+                },
+                modelUnavailable: { [weak self] unavailable in
+                    guard let self, self.chatID == chat, var current = self.connection else { return }
+                    current.model = AIConnection.accountDefault
+                    current.save()
+                    self.connection = current
+                    self.items.append(ChatItem(
+                        kind: .notice(isError: false),
+                        text: "\(ModelNames.display(unavailable)) hesabında açık değil; hesabının varsayılan modeliyle devam ediyorum."
+                    ))
+                }
             )
         }
         self.session = session
@@ -250,8 +227,8 @@ final class AssistantModel {
         case .usage(let usage):
             if let model = usage.model {
                 stats.model = model
-                if connection?.kind == .claudeCode, connection?.model == "default" {
-                    AIConnection.claudeCodeAccountDefault = model
+                if let connection, connection.kind != .apple, connection.usesAccountDefault {
+                    AIConnection.setLearnedDefault(model, for: connection.kind)
                 }
             }
             if let cost = usage.costUSD {
@@ -343,27 +320,11 @@ final class AssistantModel {
         }
         if let error = error as? AIError {
             switch error {
-            case .http(let status, _) where status == 401 || status == 403:
-                return "API anahtarı geçersiz ya da yetkisiz. Sağdaki Bağlantı kartından anahtarı kontrol et."
-            case .http(429, _):
-                return "Hız sınırına takıldı. Biraz bekleyip tekrar dene."
-            case .http(529, _), .stream("overloaded_error", _):
-                return "Servis şu an çok yoğun. Birkaç saniye sonra tekrar dene."
-            case .http(404, let message):
-                return "Model ya da adres bulunamadı (\(message)). Model adını kontrol et."
-            case .http(let status, let message):
-                return "Sağlayıcı hata döndürdü (\(status)): \(message)"
-            case .stream(_, let message), .invalidResponse(let message):
+            case .stream(_, let message), .invalidResponse(let message), .http(_, let message):
                 return message
             case .unsupportedPlatform:
                 return "Bu platformda desteklenmiyor."
             }
-        }
-        if let urlError = error as? URLError {
-            if connection?.kind == .openAICompatible, connection?.baseURL?.contains("localhost") == true {
-                return "Yerel sunucuya bağlanılamadı. Ollama ya da LM Studio çalışıyor mu?"
-            }
-            return "Bağlantı kurulamadı: \(urlError.localizedDescription)"
         }
         return error.localizedDescription
     }

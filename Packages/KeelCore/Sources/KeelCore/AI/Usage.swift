@@ -51,8 +51,14 @@ public enum ModelPricing {
 }
 
 public enum ModelNames {
-    /// "claude-opus-5-5" -> "Opus 5.5", "claude-haiku-5-5" -> "Haiku 5.5".
+    /// "claude-opus-5-5" -> "Opus 5.5", "gpt-6.1-sol" -> "GPT-6.1 Sol".
     public static func display(_ id: String) -> String {
+        if id.hasPrefix("gpt-") {
+            let parts = id.dropFirst("gpt-".count).split(separator: "-")
+            guard let version = parts.first else { return id }
+            let names = parts.dropFirst().map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            return (["GPT-\(version)"] + names).joined(separator: " ")
+        }
         guard id.hasPrefix("claude-") else { return id }
         var parts = id.dropFirst("claude-".count).split(separator: "-").map(String.init)
         // Dated snapshots end in an eight-digit date; leave it out.
