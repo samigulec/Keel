@@ -22,6 +22,7 @@ enum Palette {
     static let warning = Color(hex: 0xC2570C)
     static let warningText = Color(hex: 0xA8480A)
     static let warningTint = Color(hex: 0xFDEEE3)
+    static let danger = Color(hex: 0xB42318)
 
     // Sidebar (on Deep Hull)
     enum Sidebar {

@@ -126,10 +126,11 @@ struct ByteAmount: View {
     var bytes: Int64?
     var size: CGFloat
     var color: Color = Palette.hull
+    var base: ByteFormat.Base = .decimal
 
     var body: some View {
         if let bytes {
-            let parts = ByteFormat.parts(bytes)
+            let parts = ByteFormat.parts(bytes, base: base)
             HStack(alignment: .firstTextBaseline, spacing: size * 0.18) {
                 // Monospaced digits leave a wide gap around the comma at large sizes.
                 Text(parts.value).font(.keelMono(size, .semibold)).tracking(-size * 0.06)

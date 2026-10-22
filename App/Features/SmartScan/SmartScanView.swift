@@ -17,7 +17,12 @@ struct SmartScanView: View {
 
             HStack(alignment: .top, spacing: 16) {
                 storageCard
-                StatCard(title: "Bellek (RAM)", bytes: nil, detail: "Faz 1'de canlı gösterilecek")
+                StatCard(
+                    title: "Bellek (RAM)",
+                    bytes: status.memory.map { Int64($0.usedBytes) },
+                    detail: status.memory.map { memoryDetail($0) } ?? "Ölçülüyor…",
+                    base: .binary
+                )
                 StatCard(
                     title: "Temizlenebilir",
                     bytes: cleanup.lastScan == nil ? nil : cleanup.recommendedBytes,
@@ -116,6 +121,16 @@ struct SmartScanView: View {
         return "Ayrıca \(places) içinde \(ByteFormat.string(cleanup.optInBytes)) var; bunları Temizlik'te kendin seçebilirsin. " + safety
     }
 
+    private func memoryDetail(_ memory: MemorySnapshot) -> String {
+        let total = ByteFormat.string(Int64(memory.totalBytes), base: .binary)
+        let pressure = switch memory.pressure {
+        case .normal: "normal"
+        case .warning: "yüksek"
+        case .critical: "kritik"
+        }
+        return "\(total) içinden · baskı \(pressure)"
+    }
+
     private var storageCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Depolama").eyebrowStyle()
@@ -135,12 +150,13 @@ private struct StatCard: View {
     var title: String
     var bytes: Int64?
     var detail: String
+    var base: ByteFormat.Base = .decimal
     var isDark = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).eyebrowStyle(color: isDark ? Palette.Sidebar.eyebrow : Palette.slate)
-            ByteAmount(bytes: bytes, size: 26, color: isDark ? .white : Palette.hull)
+            ByteAmount(bytes: bytes, size: 26, color: isDark ? .white : Palette.hull, base: base)
             Text(detail)
                 .font(.keel(13, .medium))
                 .foregroundStyle(isDark ? Palette.Sidebar.text : Palette.slate)

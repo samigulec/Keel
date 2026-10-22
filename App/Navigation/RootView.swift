@@ -29,6 +29,8 @@ struct RootView: View {
             SmartScanView(openCleanup: { selection = .cleanup })
         case .cleanup:
             CleanupView()
+        case .performance:
+            PerformanceView()
         default:
             ComingSoonView(section: selection)
         }

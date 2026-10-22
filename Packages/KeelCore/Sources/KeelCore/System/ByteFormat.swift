@@ -3,19 +3,26 @@
 public enum ByteFormat {
     private static let units = ["B", "KB", "MB", "GB", "TB", "PB"]
 
-    public static func string(_ bytes: Int64) -> String {
-        let (value, unit) = parts(bytes)
+    public enum Base: Double, Sendable {
+        /// 1000-based, like Finder shows disk sizes.
+        case decimal = 1000
+        /// 1024-based, like Activity Monitor shows memory: 16 GB of RAM stays "16 GB".
+        case binary = 1024
+    }
+
+    public static func string(_ bytes: Int64, base: Base = .decimal) -> String {
+        let (value, unit) = parts(bytes, base: base)
         return "\(value) \(unit)"
     }
 
     /// The number and the unit separately, so the UI can set them in different fonts.
-    public static func parts(_ bytes: Int64) -> (value: String, unit: String) {
+    public static func parts(_ bytes: Int64, base: Base = .decimal) -> (value: String, unit: String) {
         guard bytes > 0 else { return ("0", "B") }
 
         var value = Double(bytes)
         var unitIndex = 0
-        while value >= 1000, unitIndex < units.count - 1 {
-            value /= 1000
+        while value >= base.rawValue, unitIndex < units.count - 1 {
+            value /= base.rawValue
             unitIndex += 1
         }
 
@@ -31,7 +38,7 @@ public enum ByteFormat {
 
         let rounded = Int(value.rounded())
         // 999,6 MB rounds to "1000 MB"; show it as the next unit instead.
-        if rounded >= 1000, unitIndex < units.count - 1 {
+        if Double(rounded) >= base.rawValue || rounded >= 1000, unitIndex < units.count - 1 {
             return ("1", units[unitIndex + 1])
         }
         return ("\(rounded)", units[unitIndex])

@@ -6,6 +6,7 @@ struct KeelApp: App {
 
     @State private var status: SystemStatus
     @State private var cleanup: CleanupModel
+    @State private var performance = PerformanceModel()
 
     init() {
         let status = SystemStatus()
@@ -18,6 +19,7 @@ struct KeelApp: App {
             RootView()
                 .environment(status)
                 .environment(cleanup)
+                .environment(performance)
                 .frame(minWidth: 980, minHeight: 640)
         }
         .windowStyle(.hiddenTitleBar)

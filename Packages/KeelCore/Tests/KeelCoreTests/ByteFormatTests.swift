@@ -23,6 +23,12 @@ struct ByteFormatTests {
         #expect(ByteFormat.parts(0) == ("0", "B"))
     }
 
+    @Test func memoryUsesBinaryUnits() {
+        #expect(ByteFormat.string(17_179_869_184, base: .binary) == "16 GB")
+        #expect(ByteFormat.string(12_025_908_428, base: .binary) == "11,2 GB")
+        #expect(ByteFormat.string(536_870_912, base: .binary) == "512 MB")
+    }
+
     @Test func diskSpaceFractions() {
         let disk = DiskSpace(totalBytes: 512, availableBytes: 200)
         #expect(disk.usedBytes == 312)
