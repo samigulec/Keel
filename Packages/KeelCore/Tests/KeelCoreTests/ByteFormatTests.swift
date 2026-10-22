@@ -18,6 +18,11 @@ struct ByteFormatTests {
         #expect(ByteFormat.string(bytes) == expected)
     }
 
+    @Test func partsSplitNumberFromUnit() {
+        #expect(ByteFormat.parts(4_200_000_000) == ("4,2", "GB"))
+        #expect(ByteFormat.parts(0) == ("0", "B"))
+    }
+
     @Test func diskSpaceFractions() {
         let disk = DiskSpace(totalBytes: 512, availableBytes: 200)
         #expect(disk.usedBytes == 312)

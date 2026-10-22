@@ -66,9 +66,7 @@ struct SmartScanView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Depolama").eyebrowStyle()
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(status.disk.map { ByteFormat.string($0.availableBytes) } ?? "—")
-                    .font(.keelMono(26, .semibold))
-                    .foregroundStyle(Palette.hull)
+                ByteAmount(bytes: status.disk?.availableBytes, size: 26)
                 Text("boş")
                     .font(.keel(15, .semibold))
                     .foregroundStyle(Palette.slate)

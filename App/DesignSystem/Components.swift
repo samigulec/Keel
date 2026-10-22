@@ -1,3 +1,4 @@
+import KeelCore
 import SwiftUI
 
 // MARK: - Surfaces
@@ -98,6 +99,28 @@ struct ProgressBar: View {
         .frame(height: height)
         .accessibilityElement()
         .accessibilityValue(Text(verbatim: "%\(Int((fraction * 100).rounded()))"))
+    }
+}
+
+/// A byte count as the design sets it: the number in JetBrains Mono, the unit
+/// in Manrope, so monospaced spacing does not leave a wide gap before "GB".
+struct ByteAmount: View {
+    var bytes: Int64?
+    var size: CGFloat
+    var color: Color = Palette.hull
+
+    var body: some View {
+        if let bytes {
+            let parts = ByteFormat.parts(bytes)
+            HStack(alignment: .firstTextBaseline, spacing: size * 0.18) {
+                Text(parts.value).font(.keelMono(size, .semibold))
+                Text(parts.unit).font(.keel(size * 0.8, .bold))
+            }
+            .foregroundStyle(color)
+            .accessibilityElement(children: .combine)
+        } else {
+            Text("—").font(.keelMono(size, .semibold)).foregroundStyle(color)
+        }
     }
 }
 

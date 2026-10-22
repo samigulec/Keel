@@ -51,12 +51,14 @@ private struct SidebarItem: View {
                 Text(section.title)
                     .font(.keel(15, isSelected ? .bold : .semibold))
                     .foregroundStyle(isSelected ? .white : Palette.Sidebar.text)
+                    .lineLimit(1)
                 Spacer(minLength: 4)
                 if section.phase > 1 {
                     Text("YAKINDA")
-                        .font(.keel(10, .extraBold))
+                        .font(.keel(9, .extraBold))
                         .foregroundStyle(Palette.Sidebar.eyebrow)
-                        .padding(.horizontal, 7)
+                        .fixedSize()
+                        .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Palette.Sidebar.widgetTrack, in: Capsule())
                 }
@@ -84,9 +86,13 @@ private struct DiskWidget: View {
                     .font(.keel(13, .semibold))
                     .foregroundStyle(Palette.Sidebar.text)
                 Spacer()
-                Text(usageText)
-                    .font(.keelMono(13, .medium))
-                    .foregroundStyle(.white)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    ByteAmount(bytes: disk?.usedBytes, size: 13, color: .white)
+                    Text("/")
+                        .font(.keel(13, .semibold))
+                        .foregroundStyle(Palette.Sidebar.text)
+                    ByteAmount(bytes: disk?.totalBytes, size: 13, color: .white)
+                }
             }
             ProgressBar(
                 fraction: disk?.usedFraction ?? 0,
@@ -98,10 +104,5 @@ private struct DiskWidget: View {
         .padding(16)
         .background(Palette.Sidebar.widgetBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
-    }
-
-    private var usageText: String {
-        guard let disk else { return "—" }
-        return "\(ByteFormat.string(disk.usedBytes)) / \(ByteFormat.string(disk.totalBytes))"
     }
 }

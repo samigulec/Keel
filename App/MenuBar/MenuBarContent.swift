@@ -19,9 +19,10 @@ struct MenuBarContent: View {
                 HStack {
                     Text("Disk").eyebrowStyle()
                     Spacer()
-                    Text(status.disk.map { "\(ByteFormat.string($0.availableBytes)) boş" } ?? "—")
-                        .font(.keelMono(13, .semibold))
-                        .foregroundStyle(Palette.hull)
+                    ByteAmount(bytes: status.disk?.availableBytes, size: 13)
+                    Text("boş")
+                        .font(.keel(13, .semibold))
+                        .foregroundStyle(Palette.slate)
                 }
                 ProgressBar(fraction: status.disk?.usedFraction ?? 0, tint: Palette.keelGreen, height: 6)
             }

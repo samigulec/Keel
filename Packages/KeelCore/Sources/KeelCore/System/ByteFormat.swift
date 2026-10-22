@@ -4,7 +4,13 @@ public enum ByteFormat {
     private static let units = ["B", "KB", "MB", "GB", "TB", "PB"]
 
     public static func string(_ bytes: Int64) -> String {
-        guard bytes > 0 else { return "0 B" }
+        let (value, unit) = parts(bytes)
+        return "\(value) \(unit)"
+    }
+
+    /// The number and the unit separately, so the UI can set them in different fonts.
+    public static func parts(_ bytes: Int64) -> (value: String, unit: String) {
+        guard bytes > 0 else { return ("0", "B") }
 
         var value = Double(bytes)
         var unitIndex = 0
@@ -18,16 +24,16 @@ public enum ByteFormat {
         if showsDecimal {
             let tenths = Int((value * 10).rounded())
             if tenths % 10 != 0 {
-                return "\(tenths / 10),\(tenths % 10) \(units[unitIndex])"
+                return ("\(tenths / 10),\(tenths % 10)", units[unitIndex])
             }
-            return "\(tenths / 10) \(units[unitIndex])"
+            return ("\(tenths / 10)", units[unitIndex])
         }
 
         let rounded = Int(value.rounded())
         // 999,6 MB rounds to "1000 MB"; show it as the next unit instead.
         if rounded >= 1000, unitIndex < units.count - 1 {
-            return "1 \(units[unitIndex + 1])"
+            return ("1", units[unitIndex + 1])
         }
-        return "\(rounded) \(units[unitIndex])"
+        return ("\(rounded)", units[unitIndex])
     }
 }

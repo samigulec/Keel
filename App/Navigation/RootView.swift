@@ -6,7 +6,7 @@ struct RootView: View {
     var body: some View {
         HStack(spacing: 0) {
             Sidebar(selection: $selection)
-                .frame(width: 232)
+                .frame(width: 244)
 
             ScrollView {
                 detail
