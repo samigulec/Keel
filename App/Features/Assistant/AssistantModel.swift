@@ -133,7 +133,7 @@ final class AssistantModel {
 
     /// Providers the chat box can switch to without setting anything up.
     var quickConnections: [AIConnection] {
-        var result: [AIConnection] = [AIConnection(kind: .claudeCode, model: "default")]
+        var result: [AIConnection] = [AIConnection(kind: .claudeCode, model: AIConnection.recommendedClaudeModel)]
         if AppleIntelligence.isAvailable { result.append(.apple) }
         if KeychainStore.read(account: AIConnection.claudeDefault.keychainAccount) != nil {
             result.append(.claudeDefault)
@@ -248,7 +248,12 @@ final class AssistantModel {
             }
 
         case .usage(let usage):
-            if let model = usage.model { stats.model = model }
+            if let model = usage.model {
+                stats.model = model
+                if connection?.kind == .claudeCode, connection?.model == "default" {
+                    AIConnection.claudeCodeAccountDefault = model
+                }
+            }
             if let cost = usage.costUSD {
                 // Claude Code reports the session's running total; the API reports each response.
                 stats.costUSD = connection?.kind == .claudeCode ? cost : (stats.costUSD ?? 0) + cost
@@ -287,20 +292,30 @@ final class AssistantModel {
 
     // MARK: Proposals
 
-    /// Selects exactly the proposal's categories, ready for the user's confirmation.
-    func prepare(_ proposal: CleanupProposal) -> Bool {
-        guard cleanup.phase == .ready else { return false }
-        cleanup.selection = Set(proposal.categories)
-        return cleanup.selectedBytes > 0
+    /// The items the user is about to confirm, from a suggestion card.
+    private(set) var pendingCleanup: (proposal: CleanupProposal, items: [CleanupItem])?
+
+    func review(_ proposal: CleanupProposal, items: [CleanupItem]) {
+        guard !items.isEmpty, cleanup.phase == .ready else { return }
+        pendingCleanup = (proposal, items)
     }
 
-    func apply(_ proposal: CleanupProposal) async {
-        guard let report = await cleanup.cleanSelectionAndWait() else { return }
-        appliedProposals[proposal.id] = report.freedBytes
+    func cancelPendingCleanup() {
+        pendingCleanup = nil
     }
 
-    var cleanupConfirmationBytes: Int64 { cleanup.selectedBytes }
-    var cleanupPermanentBytes: Int64 { cleanup.selectedPermanentBytes }
+    func applyPendingCleanup() async {
+        guard let pending = pendingCleanup else { return }
+        pendingCleanup = nil
+        guard let report = await cleanup.cleanAndWait(items: pending.items) else { return }
+        appliedProposals[pending.proposal.id] = report.freedBytes
+    }
+
+    var pendingBytes: Int64 { pendingCleanup?.items.reduce(0) { $0 + $1.sizeBytes } ?? 0 }
+
+    var pendingPermanentBytes: Int64 {
+        pendingCleanup?.items.filter { $0.removal == .deletePermanently }.reduce(0) { $0 + $1.sizeBytes } ?? 0
+    }
 
     // MARK: Text
 

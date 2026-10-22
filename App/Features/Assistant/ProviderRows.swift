@@ -5,7 +5,7 @@ import SwiftUI
 /// One provider in the "AI modelleri" list: icon, name, a line of detail,
 /// a status badge and its actions, which never wrap.
 struct ProviderRow<Actions: View, Detail: View>: View {
-    let icon: String
+    let mark: ProviderMark.Style
     let title: String
     let subtitle: String
     var badge: (text: String, isPositive: Bool)?
@@ -15,12 +15,7 @@ struct ProviderRow<Actions: View, Detail: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Palette.mintText)
-                    .frame(width: 38, height: 38)
-                    .background(Palette.mint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .accessibilityHidden(true)
+                ProviderMark(style: mark, size: 38)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(title)
@@ -52,8 +47,8 @@ struct ProviderRow<Actions: View, Detail: View>: View {
 }
 
 extension ProviderRow where Detail == EmptyView {
-    init(icon: String, title: String, subtitle: String, badge: (text: String, isPositive: Bool)? = nil, @ViewBuilder actions: () -> Actions) {
-        self.init(icon: icon, title: title, subtitle: subtitle, badge: badge, actions: actions, detail: { EmptyView() })
+    init(mark: ProviderMark.Style, title: String, subtitle: String, badge: (text: String, isPositive: Bool)? = nil, @ViewBuilder actions: () -> Actions) {
+        self.init(mark: mark, title: title, subtitle: subtitle, badge: badge, actions: actions, detail: { EmptyView() })
     }
 }
 
@@ -100,7 +95,7 @@ struct ClaudeAccountRow: View {
     private var isInUse: Bool { model.connection?.kind == .claudeCode }
 
     var body: some View {
-        ProviderRow(icon: "sparkle", title: "Claude", subtitle: subtitle, badge: badge) {
+        ProviderRow(mark: .claude, title: "Claude", subtitle: subtitle, badge: badge) {
             HStack(spacing: 8) {
                 if let status {
                     if !status.isInstalled {
@@ -114,7 +109,7 @@ struct ClaudeAccountRow: View {
                         InUseLabel()
                     } else {
                         Button("Kullan") {
-                            model.switchTo(AIConnection(kind: .claudeCode, model: "default"))
+                            model.switchTo(AIConnection(kind: .claudeCode, model: AIConnection.recommendedClaudeModel))
                             onDone?()
                         }
                         .buttonStyle(RowButtonStyle(prominent: true))
@@ -249,7 +244,7 @@ struct AppleIntelligenceRow: View {
 
     var body: some View {
         let status = AppleIntelligence.status
-        ProviderRow(icon: "cpu", title: "Apple Intelligence", subtitle: subtitle(status), badge: ("ücretsiz", true)) {
+        ProviderRow(mark: .apple, title: "Apple Intelligence", subtitle: subtitle(status), badge: ("ücretsiz", true)) {
             if model.connection?.kind == .apple {
                 InUseLabel()
             } else {

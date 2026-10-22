@@ -36,7 +36,7 @@ struct ConnectionForm: View {
                 ClaudeAccountRow(onDone: onDone)
                 Divider().overlay(Palette.divider)
                 ProviderRow(
-                    icon: "bubble.left.and.bubble.right",
+                    mark: .chatGPT,
                     title: "ChatGPT",
                     subtitle: "ChatGPT hesabınla, Codex CLI üzerinden",
                     badge: ("yakında", false)
@@ -48,7 +48,7 @@ struct ConnectionForm: View {
                 AppleIntelligenceRow(onDone: onDone)
                 Divider().overlay(Palette.divider)
                 ProviderRow(
-                    icon: "key",
+                    mark: .key,
                     title: "API anahtarı",
                     subtitle: "Claude API, OpenAI, Gemini, OpenRouter ya da yerel Ollama / LM Studio",
                     badge: currentUsesKey ? ("kullanılıyor", true) : nil

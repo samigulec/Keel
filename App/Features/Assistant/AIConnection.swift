@@ -12,17 +12,29 @@ struct AIConnection: Codable, Equatable {
         case openAICompatible
     }
 
-    /// Model choices for a Claude account; Claude Code resolves the aliases.
-    static let claudeCodeModels: [(alias: String, name: String)] = [
-        ("default", "Varsayılan"),
-        ("opus", "Opus"),
-        ("sonnet", "Sonnet"),
-        ("haiku", "Haiku"),
-        ("fable", "Fable"),
+    /// How hard the model thinks; more effort is slower and costs more.
+    static let effortLevels: [(id: String, detail: String)] = [
+        ("low", "Hızlı ve kısa"),
+        ("medium", "Dengeli"),
+        ("high", "Özenli"),
+        ("xhigh", "Çok özenli"),
+        ("max", "En derin, en yavaş"),
     ]
 
-    /// How hard the model thinks; more effort is slower and costs more.
-    static let effortLevels = ["low", "medium", "high", "xhigh", "max"]
+    /// Claude models offered by number, newest first. Keel recommends the first.
+    static let claudeModelIDs = [
+        "claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-haiku-5-5",
+        "claude-opus-5", "claude-sonnet-5", "claude-fable-5",
+        "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5",
+    ]
+    static let recommendedClaudeModel = "claude-opus-5-5"
+
+    /// The model Claude Code uses when Keel does not pick one, learned from
+    /// its answers, so the picker can mark it.
+    static var claudeCodeAccountDefault: String? {
+        get { UserDefaults.standard.string(forKey: "keel.ai.claudeCode.accountDefault") }
+        set { UserDefaults.standard.set(newValue, forKey: "keel.ai.claudeCode.accountDefault") }
+    }
 
     var kind: Kind
     var model: String
@@ -34,13 +46,19 @@ struct AIConnection: Codable, Equatable {
 
     var supportsEffort: Bool { kind == .claude || kind == .claudeCode }
 
-    /// Models the chat box offers for this connection, as (id, name).
+    /// Models the picker offers for this kind of connection, as (id, name).
     var modelChoices: [(id: String, name: String)] {
         switch kind {
-        case .apple: []
-        case .claudeCode: Self.claudeCodeModels.map { ($0.alias, $0.name) }
-        case .claude: AnthropicBackend.models.map { ($0.id, ModelNames.display($0.id)) }
-        case .openAICompatible: [(model, model)]
+        case .apple:
+            return [("on-device", "Cihazdaki model")]
+        case .claudeCode:
+            let accountDefault = Self.claudeCodeAccountDefault.map { " (\(ModelNames.display($0)))" } ?? ""
+            return [("default", "Hesabın varsayılanı" + accountDefault)]
+                + Self.claudeModelIDs.map { ($0, ModelNames.display($0)) }
+        case .claude:
+            return Self.claudeModelIDs.map { ($0, ModelNames.display($0)) }
+        case .openAICompatible:
+            return [(model, model)]
         }
     }
 
@@ -80,7 +98,7 @@ struct AIConnection: Codable, Equatable {
     var modelName: String {
         if kind == .apple { return "Cihaz üzerinde" }
         if kind == .claudeCode {
-            return Self.claudeCodeModels.first { $0.alias == model }?.name ?? model
+            return model == "default" ? "Hesabın varsayılanı" : ModelNames.display(model)
         }
         if kind == .claude { return ModelNames.display(model) }
         return model

@@ -128,9 +128,9 @@ final class ClaudeCodeSession: ChatSession {
 
     To suggest a cleanup, end your answer with exactly one block in this form, and nothing after it:
     ```keel-cleanup
-    {"categories": ["userCaches", "logs"], "reason": "One sentence on why this helps."}
+    {"items": ["~/Library/Caches/Firefox/Profiles"], "categories": [], "reason": "One sentence on why this helps."}
     ```
-    Use only category ids from the context that have items. Prefer the preselected ones; include "trash" (deleted permanently) or "oldDownloads" (personal files) only when the user clearly wants that. Keel shows the block as a card and nothing is removed unless the user confirms, so never say something was cleaned.
+    When the user names specific things, list them in "items" using the exact paths from the context. For whole categories use "categories" with ids from the context that have items. Either list may be empty. Prefer the preselected ones; include "trash" (deleted permanently) or "oldDownloads" (personal files) only when the user clearly wants that. Keel shows the block as a card and nothing is removed unless the user confirms, so never say something was cleaned.
 
     Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners, removing language files from apps, or disabling system services.
 

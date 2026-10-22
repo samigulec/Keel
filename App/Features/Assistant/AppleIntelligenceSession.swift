@@ -157,7 +157,9 @@ private struct ProposeCleanupTool: Tool {
 
     @Generable
     struct Arguments {
-        @Guide(description: "Category ids from scan_cleanable_space, e.g. userCaches, logs, browserCaches")
+        @Guide(description: "Paths of single items from scan_cleanable_space, when the user names specific things")
+        var items: [String]
+        @Guide(description: "Whole category ids from scan_cleanable_space, e.g. userCaches, logs, browserCaches")
         var categories: [String]
         @Guide(description: "One sentence on why this helps")
         var reason: String
@@ -165,6 +167,7 @@ private struct ProposeCleanupTool: Tool {
 
     func call(arguments: Arguments) async throws -> String {
         try await bridge.run(name: name, input: [
+            "items": .array(arguments.items.map(JSONValue.string)),
             "categories": .array(arguments.categories.map(JSONValue.string)),
             "reason": .string(arguments.reason),
         ])

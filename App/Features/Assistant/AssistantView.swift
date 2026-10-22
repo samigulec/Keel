@@ -3,41 +3,42 @@ import SwiftUI
 
 struct AssistantView: View {
     @Environment(AssistantModel.self) private var model
-    @State private var editingConnection = false
-    @State private var pendingProposal: CleanupProposal?
+    @State private var managingModels = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 18) {
-                header
+                PageHeader(
+                    title: "Keel AI",
+                    subtitle: "Bilgisayarın hakkında soru sor; Keel analiz eder, çözüm önerir. Hiçbir şey onayın olmadan yapılmaz."
+                )
                 if model.connection == nil {
-                    ScrollView {
-                        ConnectCard()
-                    }
+                    ScrollView { ConnectCard() }
                 } else {
-                    conversation
-                    Composer { editingConnection = true }
+                    Conversation()
+                    Composer { managingModels = true }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if model.connection != nil {
-                aside.frame(width: 280)
+                Aside { managingModels = true }
+                    .frame(width: 290)
             }
         }
-        .sheet(isPresented: $editingConnection) {
+        .sheet(isPresented: $managingModels) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("Yapay zeka bağlantısı")
+                    Text("AI modelleri")
                         .font(.keel(20, .extraBold))
                         .foregroundStyle(Palette.hull)
                     Spacer()
-                    Button("Bitti") { editingConnection = false }
+                    Button("Bitti") { managingModels = false }
                         .buttonStyle(RowButtonStyle())
                         .keyboardShortcut(.defaultAction)
                 }
                 ScrollView {
-                    ConnectionForm { editingConnection = false }
+                    ConnectionForm { managingModels = false }
                 }
             }
             .padding(28)
@@ -47,80 +48,25 @@ struct AssistantView: View {
             .preferredColorScheme(.light)
         }
         .confirmationDialog(
-            "\(ByteFormat.string(model.cleanupConfirmationBytes)) temizlensin mi?",
-            isPresented: Binding(get: { pendingProposal != nil }, set: { if !$0 { pendingProposal = nil } }),
-            titleVisibility: .visible,
-            presenting: pendingProposal
-        ) { proposal in
-            Button("Temizle", role: model.cleanupPermanentBytes > 0 ? ButtonRole.destructive : nil) {
-                Task { await model.apply(proposal) }
+            "\(ByteFormat.string(model.pendingBytes)) temizlensin mi?",
+            isPresented: Binding(
+                get: { model.pendingCleanup != nil },
+                set: { if !$0 { model.cancelPendingCleanup() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Temizle", role: model.pendingPermanentBytes > 0 ? ButtonRole.destructive : nil) {
+                Task { await model.applyPendingCleanup() }
             }
-            Button("Vazgeç", role: .cancel) {}
-        } message: { _ in
+            Button("Vazgeç", role: .cancel) { model.cancelPendingCleanup() }
+        } message: {
             Text(confirmationMessage)
         }
     }
 
-    private var header: some View {
-        PageHeader(
-            title: "Keel AI",
-            subtitle: "Bilgisayarın hakkında soru sor; Keel analiz eder, çözüm önerir. Hiçbir şey onayın olmadan yapılmaz."
-        )
-    }
-
-    // MARK: Conversation
-
-    private var conversation: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    if model.items.isEmpty {
-                        EmptyChat()
-                    }
-                    ForEach(model.items) { item in
-                        ChatRow(item: item, applied: appliedBytes(item)) { proposal in
-                            if model.prepare(proposal) { pendingProposal = proposal }
-                        }
-                        .id(item.id)
-                    }
-                    if model.isRunning, !isStreamingText {
-                        HStack(spacing: 10) {
-                            ProgressView().controlSize(.small)
-                            Text("Düşünüyor…")
-                                .font(.keel(14, .semibold))
-                                .foregroundStyle(Palette.slate)
-                        }
-                        .padding(.leading, 44)
-                        .id("thinking")
-                    }
-                }
-                .padding(24)
-            }
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.border) }
-            .onChange(of: model.items.last?.text) { _, _ in scrollToEnd(proxy) }
-            .onChange(of: model.items.count) { _, _ in scrollToEnd(proxy) }
-        }
-    }
-
-    private var isStreamingText: Bool {
-        guard let last = model.items.last, case .assistant = last.kind else { return false }
-        return !last.isFinished
-    }
-
-    private func scrollToEnd(_ proxy: ScrollViewProxy) {
-        if let last = model.items.last {
-            proxy.scrollTo(last.id, anchor: .bottom)
-        }
-    }
-
-    private func appliedBytes(_ item: ChatItem) -> Int64? {
-        if case .proposal(let proposal) = item.kind { model.appliedProposals[proposal.id] } else { nil }
-    }
-
     private var confirmationMessage: String {
-        let permanent = model.cleanupPermanentBytes
-        let toTrash = model.cleanupConfirmationBytes - permanent
+        let permanent = model.pendingPermanentBytes
+        let toTrash = model.pendingBytes - permanent
         var lines: [String] = []
         if toTrash > 0 {
             lines.append("\(ByteFormat.string(toTrash)) Çöp Kutusu'na taşınacak; oradan geri alabilirsin.")
@@ -130,56 +76,104 @@ struct AssistantView: View {
         }
         return lines.joined(separator: "\n\n")
     }
+}
 
-    // MARK: Aside
+// MARK: - Provider marks
 
-    private var aside: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("AI modelleri")
-                    .eyebrowStyle()
-                    .padding(.bottom, 6)
-                ForEach(model.quickConnections, id: \.keychainAccount) { option in
-                    let isCurrent = model.connection?.kind == option.kind
-                        && (option.kind != .openAICompatible || model.connection?.baseURL == option.baseURL)
-                    Button {
-                        if !isCurrent { model.switchTo(option) }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: isCurrent ? "largecircle.fill.circle" : "circle")
-                                .foregroundStyle(isCurrent ? Palette.mintText : Palette.slate)
-                            Text(option.providerName)
-                                .font(.keel(14, isCurrent ? .bold : .semibold))
-                                .foregroundStyle(Palette.hull)
-                            Spacer()
-                        }
-                        .frame(minHeight: 34)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+/// The small square that stands for a provider. Keel draws its own marks:
+/// Anthropic's and OpenAI's logos need their written permission, so they can
+/// replace these in this one place if that is granted.
+struct ProviderMark: View {
+    enum Style {
+        case claude, chatGPT, apple, key
+    }
+
+    let style: Style
+    var size: CGFloat = 36
+
+    init(style: Style, size: CGFloat = 36) {
+        self.style = style
+        self.size = size
+    }
+
+    init(kind: AIConnection.Kind, size: CGFloat = 36) {
+        self.size = size
+        switch kind {
+        case .claudeCode, .claude: style = .claude
+        case .apple: style = .apple
+        case .openAICompatible: style = .key
+        }
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+            .fill(background)
+            .frame(width: size, height: size)
+            .overlay { glyph }
+            .accessibilityHidden(true)
+    }
+
+    private var background: Color {
+        switch style {
+        case .claude: Color(hex: 0xF6E7DC)
+        case .chatGPT: Color(hex: 0xE6ECEA)
+        case .apple: Color(hex: 0xEDE8F7)
+        case .key: Palette.mint
+        }
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        switch style {
+        case .claude:
+            Text("C")
+                .font(.keel(size * 0.5, .extraBold))
+                .foregroundStyle(Color(hex: 0x9A4A2E))
+        case .chatGPT:
+            Text("G")
+                .font(.keel(size * 0.5, .extraBold))
+                .foregroundStyle(Palette.hull)
+        case .apple:
+            Image(systemName: "apple.intelligence")
+                .font(.system(size: size * 0.48, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6B4FC4))
+        case .key:
+            Image(systemName: "key.fill")
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(Palette.mintText)
+        }
+    }
+}
+
+// MARK: - Side panel
+
+/// Provider cards; a click switches straight to that provider.
+private struct Aside: View {
+    @Environment(AssistantModel.self) private var model
+    let manageModels: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("AI modelleri").eyebrowStyle()
+            ForEach(model.quickConnections, id: \.keychainAccount) { option in
+                ProviderCard(option: option, isCurrent: isCurrent(option)) {
+                    if !isCurrent(option) { model.switchTo(option) }
                 }
-                Button("Yönet…") { editingConnection = true }
-                    .buttonStyle(.plain)
+            }
+            Button(action: manageModels) {
+                Label("Model bağla ya da yönet", systemImage: "plus")
                     .font(.keel(13, .bold))
                     .foregroundStyle(Palette.mintText)
-                    .frame(minHeight: 34)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Palette.controlBorder, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
             }
-            .keelCard(padding: 20, radius: 18)
+            .buttonStyle(.plain)
 
-            if model.connection?.isLocal == true {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Tamamen bu Mac'te", systemImage: "lock.fill")
-                        .font(.keel(15, .extraBold))
-                        .foregroundStyle(Palette.hull)
-                    Text("Model bilgisayarında çalışıyor; sorduğun hiçbir şey ve hiçbir sistem verisi Mac'inden çıkmıyor.")
-                        .font(.keel(13, .medium))
-                        .foregroundStyle(Palette.slate)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .keelCard(padding: 20, radius: 18)
-            } else {
-                sharingCard
-            }
+            PrivacyNote(isLocal: model.connection?.isLocal == true)
+                .padding(.top, 8)
 
             Button {
                 model.startNewChat()
@@ -192,43 +186,378 @@ struct AssistantView: View {
         }
     }
 
-    private var sharingCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Neler paylaşılır?")
-                .font(.keel(16, .extraBold))
-                .foregroundStyle(Palette.hull)
-            ForEach(Self.sharing, id: \.self) { line in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Palette.mintText)
-                    Text(line)
-                        .font(.keel(13, .medium))
+    private func isCurrent(_ option: AIConnection) -> Bool {
+        guard let current = model.connection, current.kind == option.kind else { return false }
+        return option.kind != .openAICompatible || current.baseURL == option.baseURL
+    }
+}
+
+private struct ProviderCard: View {
+    @Environment(AssistantModel.self) private var model
+    let option: AIConnection
+    let isCurrent: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ProviderMark(kind: option.kind, size: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.keel(15, .bold))
+                        .foregroundStyle(Palette.hull)
+                    Text(subtitle)
+                        .font(.keel(12, .medium))
                         .foregroundStyle(Palette.slate)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if isCurrent {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Palette.keelGreen)
                 }
             }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Palette.danger)
-                Text("Dosyalarının içeriği asla gönderilmez.")
-                    .font(.keel(13, .bold))
+            .padding(12)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(isCurrent ? Palette.keelGreen : Palette.border, lineWidth: isCurrent ? 2 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+
+    private var title: String {
+        switch option.kind {
+        case .claudeCode: "Claude"
+        case .claude: "Claude API"
+        default: option.providerName
+        }
+    }
+
+    private var subtitle: String {
+        switch option.kind {
+        case .claudeCode:
+            let model = isCurrent ? currentModelName : "Opus 5.5"
+            return "\(model) · hesabınla"
+        case .claude:
+            return "\(isCurrent ? currentModelName : ModelNames.display(option.model)) · API anahtarı"
+        case .apple:
+            return "Cihazda · ücretsiz"
+        case .openAICompatible:
+            return option.model
+        }
+    }
+
+    private var currentModelName: String {
+        if let answered = model.stats.model { return ModelNames.display(answered) }
+        return model.connection?.modelName ?? ""
+    }
+}
+
+private struct PrivacyNote: View {
+    let isLocal: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(isLocal ? "Tamamen bu Mac'te" : "Neler paylaşılır?", systemImage: isLocal ? "lock.fill" : "eye")
+                .font(.keel(14, .extraBold))
+                .foregroundStyle(Palette.hull)
+            Text(isLocal
+                ? "Model bilgisayarında çalışıyor; hiçbir veri Mac'inden çıkmıyor."
+                : "Sistem özeti, önbellek klasörlerinin adları ve boyutları, uygulama ve servis adları. Dosyalarının içeriği asla gönderilmez.")
+                .font(.keel(12, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.track.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+// MARK: - Conversation
+
+private struct Conversation: View {
+    @Environment(AssistantModel.self) private var model
+
+    /// Consecutive tool calls are shown together as one row of chips.
+    private enum Row: Identifiable {
+        case item(ChatItem)
+        case tools([ChatItem])
+
+        var id: UUID {
+            switch self {
+            case .item(let item): item.id
+            case .tools(let items): items[0].id
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if model.items.isEmpty {
+                        EmptyChat()
+                    }
+                    ForEach(rows) { row in
+                        switch row {
+                        case .item(let item):
+                            ChatRow(item: item, freedBytes: appliedBytes(item))
+                        case .tools(let items):
+                            ToolChips(items: items)
+                        }
+                    }
+                    if model.isRunning, !isStreamingText {
+                        HStack(spacing: 10) {
+                            ProgressView().controlSize(.small)
+                            Text("Düşünüyor…")
+                                .font(.keel(14, .semibold))
+                                .foregroundStyle(Palette.slate)
+                        }
+                        .padding(.leading, 44)
+                    }
+                    Color.clear.frame(height: 1).id("end")
+                }
+                .padding(24)
+            }
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.border) }
+            .onChange(of: model.items.last?.text) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
+            .onChange(of: model.items.count) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
+        }
+    }
+
+    private var rows: [Row] {
+        var rows: [Row] = []
+        for item in model.items {
+            if case .tool = item.kind {
+                if case .tools(let group)? = rows.last {
+                    rows[rows.count - 1] = .tools(group + [item])
+                } else {
+                    rows.append(.tools([item]))
+                }
+            } else {
+                rows.append(.item(item))
+            }
+        }
+        return rows
+    }
+
+    private var isStreamingText: Bool {
+        guard let last = model.items.last, case .assistant = last.kind else { return false }
+        return !last.isFinished
+    }
+
+    private func appliedBytes(_ item: ChatItem) -> Int64? {
+        if case .proposal(let proposal) = item.kind { model.appliedProposals[proposal.id] } else { nil }
+    }
+}
+
+private struct ToolChips: View {
+    let items: [ChatItem]
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(items) { item in
+                HStack(spacing: 6) {
+                    if item.isFinished {
+                        Image(systemName: item.isFailed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(item.isFailed ? Palette.warningText : Palette.mintText)
+                    } else {
+                        ProgressView().controlSize(.mini)
+                    }
+                    Text(label(item))
+                        .font(.keel(12, .bold))
+                        .foregroundStyle(Palette.slate)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Palette.mist, in: Capsule())
+            }
+        }
+        .padding(.leading, 42)
+    }
+
+    private func label(_ item: ChatItem) -> String {
+        guard case .tool(let name) = item.kind else { return "" }
+        let title = KeelTools.displayNames[name] ?? name
+        return item.isFinished ? title : "\(title)…"
+    }
+}
+
+private struct ChatRow: View {
+    let item: ChatItem
+    let freedBytes: Int64?
+
+    var body: some View {
+        switch item.kind {
+        case .user:
+            HStack {
+                Spacer(minLength: 80)
+                Text(item.text)
+                    .font(.keel(15, .medium))
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    .background(
+                        Palette.hull,
+                        in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16, style: .continuous)
+                    )
+            }
+
+        case .assistant:
+            HStack(alignment: .top, spacing: 12) {
+                KeelLogoTile(size: 30)
+                Text(Self.markdown(item.text))
+                    .font(.keel(15, .medium))
+                    .foregroundStyle(Palette.hull)
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+        case .tool:
+            EmptyView()
+
+        case .proposal(let proposal):
+            ProposalCard(proposal: proposal, freedBytes: freedBytes)
+                .padding(.leading, 42)
+
+        case .notice(let isError):
+            Label(item.text, systemImage: isError ? "exclamationmark.triangle.fill" : "info.circle")
+                .font(.keel(13, .semibold))
+                .foregroundStyle(isError ? Palette.danger : Palette.slate)
+                .padding(.leading, 42)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Inline Markdown (bold, code, links); line breaks are kept as written.
+    static func markdown(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+    }
+}
+
+/// A suggested cleanup with every item listed; the user can untick any
+/// item before confirming.
+private struct ProposalCard: View {
+    @Environment(AssistantModel.self) private var model
+    let proposal: CleanupProposal
+    let freedBytes: Int64?
+
+    @State private var excluded: Set<String> = []
+    @State private var showsAll = false
+
+    private static let collapsedCount = 6
+
+    private var selected: [CleanupItem] {
+        proposal.items.filter { !excluded.contains($0.id) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Temizlik önerisi", systemImage: "sparkles")
+                    .font(.keel(13, .extraBold))
+                    .foregroundStyle(Palette.mintText)
+                Spacer()
+                ByteAmount(bytes: selected.reduce(0) { $0 + $1.sizeBytes }, size: 18)
+            }
+            if !proposal.reason.isEmpty {
+                Text(proposal.reason)
+                    .font(.keel(14, .medium))
                     .foregroundStyle(Palette.hull)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            VStack(spacing: 0) {
+                ForEach(visibleItems) { item in
+                    itemRow(item)
+                    if item.id != visibleItems.last?.id {
+                        Divider().overlay(Palette.divider)
+                    }
+                }
+                if proposal.items.count > Self.collapsedCount {
+                    Button(showsAll ? "Daha az göster" : "Tümünü göster (\(proposal.items.count) öğe)") {
+                        showsAll.toggle()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.keel(12, .bold))
+                    .foregroundStyle(Palette.mintText)
+                    .frame(maxWidth: .infinity, minHeight: 32)
+                }
+            }
+            .padding(.horizontal, 12)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.border) }
+
+            if let freedBytes {
+                Label("\(ByteFormat.string(freedBytes)) temizlendi", systemImage: "checkmark.circle.fill")
+                    .font(.keel(14, .bold))
+                    .foregroundStyle(Palette.mintText)
+            } else {
+                HStack(spacing: 12) {
+                    Button("Seçilenleri temizle (\(selected.count))") {
+                        model.review(proposal, items: selected)
+                    }
+                    .buttonStyle(RowButtonStyle(prominent: true))
+                    .disabled(selected.isEmpty)
+                    Text(selected.contains { $0.removal == .deletePermanently }
+                        ? "Çöp Kutusu'ndakiler kalıcı silinir"
+                        : "Çöp Kutusu'na taşınır, geri alınabilir")
+                        .font(.keel(12, .medium))
+                        .foregroundStyle(Palette.slate)
+                }
+            }
         }
-        .keelCard(padding: 22, radius: 20)
+        .padding(16)
+        .frame(maxWidth: 560, alignment: .leading)
+        .background(Palette.mist, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border) }
     }
 
-    private static let sharing = [
-        "Sistem özeti: işlemci, bellek, GPU, disk, pil",
-        "Önbellek klasörlerinin adları ve boyutları",
-        "Açık uygulamaların ve arka plan servislerinin adları",
-    ]
+    private var visibleItems: [CleanupItem] {
+        showsAll ? proposal.items : Array(proposal.items.prefix(Self.collapsedCount))
+    }
+
+    private func itemRow(_ item: CleanupItem) -> some View {
+        HStack(spacing: 10) {
+            Toggle("", isOn: Binding(
+                get: { !excluded.contains(item.id) },
+                set: { isOn in
+                    if isOn { excluded.remove(item.id) } else { excluded.insert(item.id) }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            .disabled(freedBytes != nil)
+            .accessibilityLabel(HomePath.display(item.url))
+
+            Text(HomePath.display(item.url))
+                .font(.keelMono(12, .medium))
+                .foregroundStyle(excluded.contains(item.id) ? Palette.slate.opacity(0.6) : Palette.hull)
+                .strikethrough(excluded.contains(item.id))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(item.url.path)
+            Spacer(minLength: 8)
+            Text(ByteFormat.string(item.sizeBytes))
+                .font(.keelMono(12, .semibold))
+                .foregroundStyle(Palette.hull)
+        }
+        .frame(minHeight: 34)
+    }
 }
 
-// MARK: - Pieces
+// MARK: - Empty states
 
 private struct ConnectCard: View {
     var body: some View {
@@ -236,10 +565,10 @@ private struct ConnectCard: View {
             HStack(spacing: 14) {
                 KeelLogoTile(size: 44)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Kendi yapay zekanı bağla")
+                    Text("Bir yapay zeka bağla")
                         .font(.keel(20, .extraBold))
                         .foregroundStyle(Palette.hull)
-                    Text("Apple Intelligence, Claude, OpenAI, Gemini, OpenRouter ya da bilgisayarında çalışan Ollama / LM Studio.")
+                    Text("Claude hesabın, Apple Intelligence ya da kendi API anahtarın.")
                         .font(.keel(14, .medium))
                         .foregroundStyle(Palette.slate)
                         .fixedSize(horizontal: false, vertical: true)
@@ -247,8 +576,7 @@ private struct ConnectCard: View {
             }
             ConnectionForm()
         }
-        .keelCard(padding: 28, radius: 22)
-        .frame(maxWidth: 620, alignment: .leading)
+        .frame(maxWidth: 640, alignment: .leading)
     }
 }
 
@@ -271,7 +599,7 @@ private struct EmptyChat: View {
                         .font(.keel(13, .semibold))
                         .foregroundStyle(Palette.hull)
                         .padding(.horizontal, 14)
-                        .frame(minHeight: 40)
+                        .frame(minHeight: 36)
                         .background(Palette.card, in: Capsule())
                         .overlay { Capsule().strokeBorder(Palette.controlBorder) }
                 }
@@ -281,118 +609,9 @@ private struct EmptyChat: View {
     }
 }
 
-private struct ChatRow: View {
-    let item: ChatItem
-    let applied: Int64?
-    let review: (CleanupProposal) -> Void
+// MARK: - Composer
 
-    var body: some View {
-        switch item.kind {
-        case .user:
-            HStack {
-                Spacer(minLength: 80)
-                Text(item.text)
-                    .font(.keel(15, .medium))
-                    .foregroundStyle(.white)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Palette.hull, in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16, style: .continuous))
-            }
-
-        case .assistant:
-            HStack(alignment: .top, spacing: 12) {
-                KeelLogoTile(size: 30)
-                Text(Self.markdown(item.text))
-                    .font(.keel(15, .medium))
-                    .foregroundStyle(Palette.hull)
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-        case .tool(let name):
-            HStack(spacing: 8) {
-                if item.isFinished {
-                    Image(systemName: item.isFailed ? "exclamationmark.triangle" : "checkmark.circle.fill")
-                        .foregroundStyle(item.isFailed ? Palette.warningText : Palette.mintText)
-                } else {
-                    ProgressView().controlSize(.mini)
-                }
-                Text(toolLabel(name))
-                    .font(.keel(12, .bold))
-                    .foregroundStyle(Palette.slate)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Palette.mist, in: Capsule())
-            .padding(.leading, 42)
-
-        case .proposal(let proposal):
-            ProposalCard(proposal: proposal, freedBytes: applied) { review(proposal) }
-                .padding(.leading, 42)
-
-        case .notice(let isError):
-            Text(item.text)
-                .font(.keel(13, .semibold))
-                .foregroundStyle(isError ? Palette.danger : Palette.slate)
-                .padding(.leading, 42)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func toolLabel(_ name: String) -> String {
-        let title = KeelTools.displayNames[name] ?? name
-        if !item.isFinished { return "\(title) okunuyor…" }
-        return item.isFailed ? "\(title): hata" : title
-    }
-
-    /// Inline Markdown (bold, code, links); line breaks are kept as written.
-    static func markdown(_ text: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-    }
-}
-
-private struct ProposalCard: View {
-    let proposal: CleanupProposal
-    let freedBytes: Int64?
-    let review: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Temizlik önerisi").eyebrowStyle()
-                Spacer()
-                ByteAmount(bytes: proposal.bytes, size: 18)
-            }
-            if !proposal.reason.isEmpty {
-                Text(proposal.reason)
-                    .font(.keel(14, .medium))
-                    .foregroundStyle(Palette.hull)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Text(proposal.titles.joined(separator: " · "))
-                .font(.keel(13, .semibold))
-                .foregroundStyle(Palette.slate)
-            if let freedBytes {
-                Label("\(ByteFormat.string(freedBytes)) temizlendi", systemImage: "checkmark.circle.fill")
-                    .font(.keel(14, .bold))
-                    .foregroundStyle(Palette.mintText)
-            } else {
-                Button("Gözden geçir ve temizle", action: review)
-                    .buttonStyle(.keelPrimary)
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: 520, alignment: .leading)
-        .background(Palette.mist, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border) }
-    }
-}
-
-/// The message box with the model controls above it: provider, model and
-/// effort menus, and a line with cost, turns and how full the context is.
+/// The message box with the model picker, effort and usage above it.
 private struct Composer: View {
     @Environment(AssistantModel.self) private var model
     let manageModels: () -> Void
@@ -401,27 +620,25 @@ private struct Composer: View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 0) {
             if let connection = model.connection {
-                HStack(spacing: 20) {
-                    providerMenu(connection)
-                    modelMenu(connection)
-                    if connection.supportsEffort {
-                        effortMenu(connection)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        controls(connection)
+                        Spacer(minLength: 12)
+                        StatsLine(stats: model.stats, connection: connection)
                     }
-                    Spacer(minLength: 0)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) { controls(connection) }
+                        StatsLine(stats: model.stats, connection: connection)
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
 
-                StatsLine(stats: model.stats, connection: connection)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 10)
+                Divider().overlay(Palette.divider)
             }
 
-            Divider().overlay(Palette.divider)
-
             HStack(alignment: .bottom, spacing: 10) {
-                TextField("Mesaj yaz… örn. \"Hangi uygulama pili tüketiyor?\"", text: $model.draft, axis: .vertical)
+                TextField("Mesaj yaz… örn. \"Sadece Firefox önbelleğini sil\"", text: $model.draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.keel(15, .medium))
                     .lineLimit(1...5)
@@ -460,97 +677,68 @@ private struct Composer: View {
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.controlBorder) }
     }
 
-    // MARK: Menus
-
-    private func providerMenu(_ connection: AIConnection) -> some View {
-        Menu {
-            ForEach(model.quickConnections, id: \.keychainAccount) { option in
-                Button {
-                    model.switchTo(option)
-                } label: {
-                    if option.kind == connection.kind {
-                        Label(option.providerName, systemImage: "checkmark")
-                    } else {
-                        Text(option.providerName)
-                    }
-                }
-            }
-            Divider()
-            Button("AI modellerini yönet…", action: manageModels)
-        } label: {
-            MenuLabel(text: connection.providerName)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Sağlayıcıyı değiştirmek yeni bir sohbet başlatır")
-    }
-
     @ViewBuilder
-    private func modelMenu(_ connection: AIConnection) -> some View {
-        let choices = connection.modelChoices
-        if choices.count <= 1 {
-            MenuLabel(text: modelTitle(connection), showsChevron: false)
-        } else {
-            Menu {
-                ForEach(choices, id: \.id) { choice in
-                    Button {
-                        model.update(model: choice.id)
-                    } label: {
-                        if choice.id == connection.model {
-                            Label(choice.name, systemImage: "checkmark")
-                        } else {
-                            Text(choice.name)
-                        }
-                    }
-                }
-            } label: {
-                MenuLabel(text: modelTitle(connection))
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+    private func controls(_ connection: AIConnection) -> some View {
+        ModelPicker(manageModels: manageModels)
+        if connection.supportsEffort {
+            EffortPicker(effort: connection.effort)
         }
     }
+}
 
-    private func effortMenu(_ connection: AIConnection) -> some View {
-        Menu {
-            Button {
-                model.update(effort: .some(nil))
-            } label: {
-                if connection.effort == nil {
-                    Label("Varsayılan", systemImage: "checkmark")
-                } else {
-                    Text("Varsayılan")
-                }
-            }
-            ForEach(AIConnection.effortLevels, id: \.self) { level in
-                Button {
-                    model.update(effort: .some(level))
-                } label: {
-                    if level == connection.effort {
-                        Label(level, systemImage: "checkmark")
-                    } else {
-                        Text(level)
-                    }
-                }
-            }
-        } label: {
-            MenuLabel(text: connection.effort ?? "effort")
+/// A chip that opens a popover, like the model and effort pickers.
+private struct ChipLabel<Leading: View>: View {
+    let text: String
+    @ViewBuilder var leading: Leading
+
+    var body: some View {
+        HStack(spacing: 7) {
+            leading
+            Text(text)
+                .font(.keel(13, .bold))
+                .foregroundStyle(Palette.hull)
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Palette.slate)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Düşünme seviyesi: yükseldikçe yanıtlar daha özenli ama daha yavaş ve pahalı olur")
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(Palette.mist, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .contentShape(Rectangle())
+    }
+}
+
+/// Provider column on the left, that provider's models by number on the right.
+private struct ModelPicker: View {
+    @Environment(AssistantModel.self) private var model
+    let manageModels: () -> Void
+
+    @State private var isOpen = false
+    @State private var browsing: AIConnection?
+
+    var body: some View {
+        Button { open() } label: {
+            ChipLabel(text: title) {
+                if let kind = model.connection?.kind {
+                    ProviderMark(kind: kind, size: 20)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isOpen, arrowEdge: .top) { picker }
+        .help("Model seç")
     }
 
-    /// The model name to show: the one that actually answered when known.
-    private func modelTitle(_ connection: AIConnection) -> String {
+    private var title: String {
+        guard let connection = model.connection else { return "Model" }
         switch connection.kind {
         case .apple:
-            return "Cihaz modeli"
+            return "Apple Intelligence"
         case .claudeCode:
-            if let answered = model.stats.model { return ModelNames.display(answered) }
+            if connection.model == "default", let answered = model.stats.model {
+                return ModelNames.display(answered)
+            }
             return connection.modelName
         case .claude:
             return ModelNames.display(connection.model)
@@ -558,26 +746,163 @@ private struct Composer: View {
             return connection.model
         }
     }
+
+    private func open() {
+        browsing = model.connection
+        isOpen = true
+    }
+
+    private var picker: some View {
+        let providers = model.quickConnections
+        let shown = browsing ?? model.connection ?? providers.first
+        return HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 6) {
+                ForEach(providers, id: \.keychainAccount) { option in
+                    Button { browsing = option } label: {
+                        ProviderMark(kind: option.kind, size: 30)
+                            .padding(4)
+                            .background(
+                                shown?.keychainAccount == option.keychainAccount ? Palette.track : .clear,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(option.providerName)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(8)
+            .frame(width: 56)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Model · \(shown?.providerName ?? "")").eyebrowStyle()
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let shown {
+                            ForEach(shown.modelChoices, id: \.id) { choice in
+                                modelRow(choice, in: shown)
+                            }
+                        }
+                    }
+                }
+                Divider()
+                Button("AI modellerini yönet…") {
+                    isOpen = false
+                    manageModels()
+                }
+                .buttonStyle(.plain)
+                .font(.keel(13, .bold))
+                .foregroundStyle(Palette.mintText)
+                .padding(12)
+            }
+            .frame(width: 290)
+        }
+        .frame(height: 400)
+        .background(Palette.card)
+    }
+
+    private func modelRow(_ choice: (id: String, name: String), in provider: AIConnection) -> some View {
+        let isCurrent = model.connection?.keychainAccount == provider.keychainAccount && model.connection?.model == choice.id
+        return Button {
+            select(choice.id, in: provider)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Palette.keelGreen)
+                    .opacity(isCurrent ? 1 : 0)
+                Text(choice.name)
+                    .font(.keel(14, isCurrent ? .bold : .medium))
+                    .foregroundStyle(Palette.hull)
+                Spacer(minLength: 8)
+                if choice.id == AIConnection.recommendedClaudeModel {
+                    Pill(text: "ÖNERİLEN")
+                } else if provider.kind == .claudeCode, choice.id == AIConnection.claudeCodeAccountDefault {
+                    Pill(text: "HESAP VARSAYILANI", background: Palette.track, foreground: Palette.slate)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func select(_ modelID: String, in provider: AIConnection) {
+        if model.connection?.keychainAccount == provider.keychainAccount {
+            model.update(model: modelID)
+        } else {
+            var next = provider
+            next.model = modelID
+            model.switchTo(next)
+        }
+        isOpen = false
+    }
 }
 
-private struct MenuLabel: View {
-    let text: String
-    var showsChevron = true
+private struct EffortPicker: View {
+    @Environment(AssistantModel.self) private var model
+    let effort: String?
+    @State private var isOpen = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(text)
-                .font(.keel(14, .semibold))
-                .foregroundStyle(Palette.hull)
-                .lineLimit(1)
-            if showsChevron {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
+        Button { isOpen = true } label: {
+            ChipLabel(text: effort ?? "effort") {
+                Image(systemName: "gauge.with.dots.needle.50percent")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Palette.slate)
             }
         }
-        .frame(minHeight: 28)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .help("Düşünme seviyesi")
+        .popover(isPresented: $isOpen, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Düşünme seviyesi").eyebrowStyle()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                row(id: nil, name: "Varsayılan", detail: "Sağlayıcının ayarı")
+                ForEach(AIConnection.effortLevels, id: \.id) { level in
+                    row(id: level.id, name: level.id, detail: level.detail)
+                }
+                Text("Yükseldikçe yanıt daha özenli olur ama daha yavaş gelir ve daha çok kullanım harcar.")
+                    .font(.keel(11, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+            }
+            .frame(width: 260)
+            .background(Palette.card)
+        }
+    }
+
+    private func row(id: String?, name: String, detail: String) -> some View {
+        Button {
+            model.update(effort: .some(id))
+            isOpen = false
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Palette.keelGreen)
+                    .opacity(effort == id ? 1 : 0)
+                Text(name)
+                    .font(.keelMono(13, effort == id ? .semibold : .medium))
+                    .foregroundStyle(Palette.hull)
+                Spacer()
+                Text(detail)
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.slate)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -587,7 +912,7 @@ private struct StatsLine: View {
     let connection: AIConnection
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Text(costText)
                 .help(costHelp)
             Text("·")
@@ -596,34 +921,35 @@ private struct StatsLine: View {
                 Text("·")
                 Text("bağlam")
                 ProgressBar(fraction: max(fraction, 0.01), tint: Palette.slate, height: 4)
-                    .frame(width: 90)
+                    .frame(width: 70)
                 Text("%\(Int((fraction * 100).rounded()))")
             }
         }
-        .font(.keelMono(12, .medium))
+        .font(.keelMono(11, .medium))
         .foregroundStyle(Palette.slate)
         .lineLimit(1)
+        .fixedSize()
     }
 
     private var costText: String {
-        if connection.isLocal { return "ücretsiz · cihazda" }
+        if connection.isLocal { return "ücretsiz" }
         guard let cost = stats.costUSD else { return "maliyet —" }
-        if cost > 0, cost < 0.01 { return "maliyet <$0,01" }
-        let formatted = String(format: "%.2f", cost).replacingOccurrences(of: ".", with: ",")
-        return "maliyet ≈$\(formatted)"
+        if cost > 0, cost < 0.01 { return "<$0,01" }
+        return "≈$" + String(format: "%.2f", cost).replacingOccurrences(of: ".", with: ",")
     }
 
     private var costHelp: String {
         switch connection.kind {
         case .claudeCode: "Claude Code'un API fiyatlarıyla tahmini. Aboneliğinden ayrıca ücret alınmaz; kullanım limitlerine sayılır."
         case .claude: "Liste fiyatlarıyla tahmini; asıl fatura Anthropic'ten gelir."
-        default: "Bu sağlayıcı maliyet bilgisi vermiyor."
+        case .apple: "Cihazda çalışır, ücretsizdir."
+        case .openAICompatible: "Bu sağlayıcı maliyet bilgisi vermiyor."
         }
     }
 }
 
-/// Lays children out left to right and wraps to new lines, like suggestion chips.
-private struct FlowLayout: Layout {
+/// Lays children out left to right and wraps to new lines, like chips.
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

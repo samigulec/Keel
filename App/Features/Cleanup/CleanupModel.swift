@@ -124,13 +124,21 @@ final class CleanupModel {
     /// Removes the selected categories and returns the report once done.
     @discardableResult
     func cleanSelectionAndWait() async -> CleanupReport? {
+        await cleanAndWait(items: selectedResults.flatMap(\.items))
+    }
+
+    /// Removes exactly these items, e.g. the ones the user kept ticked on a
+    /// Keel AI suggestion. Items no longer in the latest scan are skipped.
+    @discardableResult
+    func cleanAndWait(items: [CleanupItem]) async -> CleanupReport? {
         guard phase == .ready else { return nil }
-        let items = selectedResults.flatMap(\.items)
-        guard !items.isEmpty else { return nil }
+        let current = Set(results.flatMap(\.items))
+        let valid = items.filter(current.contains)
+        guard !valid.isEmpty else { return nil }
         phase = .cleaning
 
         let report = await Task.detached(priority: .userInitiated) {
-            CleanupExecutor.standard().perform(items)
+            CleanupExecutor.standard().perform(valid)
         }.value
         let cleaned = Set(report.removed)
         results = results.map { $0.removing(cleaned) }
