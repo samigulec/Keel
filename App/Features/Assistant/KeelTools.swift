@@ -57,9 +57,7 @@ enum KeelTools {
                 inputSchema: noInput
             ) { _ in
                 await performance.refreshApps()
-                return JSONValue.array(performance.topApps.prefix(compact ? 5 : 8).map { app in
-                    ["app": .string(app.name), "memory_mb": .number(Double(app.footprintBytes / 1_048_576))]
-                }).encodedString()
+                return topApps(performance, compact: compact).encodedString()
             },
 
             AITool(
@@ -68,19 +66,7 @@ enum KeelTools {
                 inputSchema: noInput
             ) { _ in
                 await performance.refreshLaunchItems()
-                let items = compact ? Array(performance.activeLaunchItems.prefix(12)) : performance.launchItems
-                return JSONValue.array(items.map { item in
-                    var entry: [String: JSONValue] = [
-                        "name": .string(item.displayName),
-                        "scope": .string(item.scope.rawValue),
-                        "starts": .string(item.isDisabled ? "disabled" : item.keepsAlive ? "always" : item.runsAtLoad ? "at_login" : "on_demand"),
-                    ]
-                    if !compact {
-                        entry["label"] = .string(item.label)
-                        entry["program"] = item.program.map(JSONValue.string) ?? .null
-                    }
-                    return .object(entry)
-                }).encodedString()
+                return backgroundServices(performance, compact: compact).encodedString()
             },
 
             AITool(
@@ -134,6 +120,28 @@ enum KeelTools {
 
     private static func percent(_ value: Double) -> JSONValue {
         .number((value * 100).rounded())
+    }
+
+    static func topApps(_ performance: PerformanceModel, compact: Bool = false) -> JSONValue {
+        .array(performance.topApps.prefix(compact ? 5 : 8).map { app in
+            ["app": .string(app.name), "memory_mb": .number(Double(app.footprintBytes / 1_048_576))]
+        })
+    }
+
+    static func backgroundServices(_ performance: PerformanceModel, compact: Bool = false) -> JSONValue {
+        let items = compact ? Array(performance.activeLaunchItems.prefix(12)) : performance.launchItems
+        return .array(items.map { item in
+            var entry: [String: JSONValue] = [
+                "name": .string(item.displayName),
+                "scope": .string(item.scope.rawValue),
+                "starts": .string(item.isDisabled ? "disabled" : item.keepsAlive ? "always" : item.runsAtLoad ? "at_login" : "on_demand"),
+            ]
+            if !compact {
+                entry["label"] = .string(item.label)
+                entry["program"] = item.program.map(JSONValue.string) ?? .null
+            }
+            return .object(entry)
+        })
     }
 
     static func systemStatus(_ status: SystemStatus, compact: Bool = false) -> JSONValue {

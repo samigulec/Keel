@@ -6,9 +6,19 @@ struct AIConnection: Codable, Equatable {
     enum Kind: String, Codable {
         /// Apple's on-device model: no key, no account, nothing leaves the Mac.
         case apple
+        /// The user's own Claude account, through the Claude Code tool they installed.
+        case claudeCode
         case claude
         case openAICompatible
     }
+
+    /// Model choices for a Claude account; Claude Code resolves the aliases.
+    static let claudeCodeModels: [(alias: String, name: String)] = [
+        ("default", "Hesabının varsayılanı"),
+        ("opus", "Opus"),
+        ("sonnet", "Sonnet"),
+        ("haiku", "Haiku"),
+    ]
 
     var kind: Kind
     var model: String
@@ -22,6 +32,7 @@ struct AIConnection: Codable, Equatable {
     var keychainAccount: String {
         switch kind {
         case .apple: "apple"
+        case .claudeCode: "claude-code"
         case .claude: "anthropic"
         case .openAICompatible: "openai-compatible:\(baseURL ?? "")"
         }
@@ -29,7 +40,7 @@ struct AIConnection: Codable, Equatable {
 
     var needsKey: Bool {
         switch kind {
-        case .apple: false
+        case .apple, .claudeCode: false
         case .claude: true
         case .openAICompatible: preset?.needsKey ?? true
         }
@@ -42,13 +53,17 @@ struct AIConnection: Codable, Equatable {
     var providerName: String {
         switch kind {
         case .apple: "Apple Intelligence"
-        case .claude: "Claude"
+        case .claudeCode: "Claude hesabı"
+        case .claude: "Claude API"
         case .openAICompatible: preset?.name ?? "OpenAI uyumlu"
         }
     }
 
     var modelName: String {
         if kind == .apple { return "Cihaz üzerinde" }
+        if kind == .claudeCode {
+            return Self.claudeCodeModels.first { $0.alias == model }?.name ?? model
+        }
         return AnthropicBackend.models.first { $0.id == model }?.name ?? model
     }
 
@@ -59,8 +74,8 @@ struct AIConnection: Codable, Equatable {
 
     func backend(apiKey: String?) throws -> any ChatBackend {
         switch kind {
-        case .apple:
-            throw AIError.invalidResponse("Apple Intelligence HTTP üzerinden çalışmaz")
+        case .apple, .claudeCode:
+            throw AIError.invalidResponse("\(providerName) HTTP üzerinden çalışmaz")
         case .claude:
             return AnthropicBackend(apiKey: apiKey ?? "", model: model)
         case .openAICompatible:

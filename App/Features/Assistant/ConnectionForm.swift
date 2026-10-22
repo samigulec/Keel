@@ -23,6 +23,7 @@ struct ConnectionForm: View {
     @State private var clipboardKey: String?
     @State private var isTesting = false
     @State private var message: (text: String, isError: Bool)?
+    @State private var showsKeyOptions = false
 
     private var apple: AppleIntelligence.Status { AppleIntelligence.status }
 
@@ -32,47 +33,25 @@ struct ConnectionForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Hesabınla bağlan").eyebrowStyle()
+                HStack(alignment: .top, spacing: 14) {
+                    ClaudeAccountCard(onDone: onDone)
+                    ComingSoonAccountCard(
+                        title: "ChatGPT",
+                        detail: "ChatGPT hesabıyla bağlanma (Codex CLI üzerinden) bir sonraki adımda geliyor."
+                    )
+                }
+            }
+
             appleOption
 
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Daha güçlü bir model bağla")
-                    .font(.keel(16, .extraBold))
+            DisclosureGroup(isExpanded: $showsKeyOptions) {
+                keyOptions.padding(.top, 14)
+            } label: {
+                Text("API anahtarıyla bağlan (gelişmiş)")
+                    .font(.keel(15, .bold))
                     .foregroundStyle(Palette.hull)
-                Picker("Sağlayıcı", selection: $choice) {
-                    Text("Claude").tag(Choice.claude)
-                    Text("Diğer servisler").tag(Choice.other)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
-                switch choice {
-                case .claude: claudeSteps
-                case .other: otherFields
-                }
-
-                if let message {
-                    Label(message.text, systemImage: message.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .font(.keel(13, .semibold))
-                        .foregroundStyle(message.isError ? Palette.danger : Palette.mintText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                HStack(spacing: 12) {
-                    Button(action: testAndConnect) {
-                        if isTesting {
-                            ProgressView().controlSize(.small).tint(.white)
-                        } else {
-                            Text("Test et ve bağlan")
-                        }
-                    }
-                    .buttonStyle(.keelPrimary)
-                    .disabled(!canConnect || isTesting)
-
-                    if let onDone {
-                        Button("Vazgeç", action: onDone)
-                            .buttonStyle(.keelSecondary)
-                    }
-                }
             }
         }
         .onAppear {
@@ -82,6 +61,48 @@ struct ConnectionForm: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Back from the browser with a freshly copied key.
             checkClipboard()
+        }
+    }
+
+    // MARK: API keys
+
+    private var keyOptions: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("Sağlayıcı", selection: $choice) {
+                Text("Claude API").tag(Choice.claude)
+                Text("Diğer servisler").tag(Choice.other)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            switch choice {
+            case .claude: claudeSteps
+            case .other: otherFields
+            }
+
+            if let message {
+                Label(message.text, systemImage: message.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.keel(13, .semibold))
+                    .foregroundStyle(message.isError ? Palette.danger : Palette.mintText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 12) {
+                Button(action: testAndConnect) {
+                    if isTesting {
+                        ProgressView().controlSize(.small).tint(.white)
+                    } else {
+                        Text("Test et ve bağlan")
+                    }
+                }
+                .buttonStyle(.keelPrimary)
+                .disabled(!canConnect || isTesting)
+
+                if let onDone {
+                    Button("Vazgeç", action: onDone)
+                        .buttonStyle(.keelSecondary)
+                }
+            }
         }
     }
 
@@ -176,7 +197,7 @@ struct ConnectionForm: View {
                 .labelsHidden()
             }
 
-            Text("Kullandıkça ücretlendirilir; Claude.ai aboneliği (Pro/Max) API kullanımını kapsamaz.")
+            Text("Kullandıkça ücretlendirilir. Claude Pro/Max aboneliğin varsa yukarıdaki \"Hesabınla bağlan\" daha kolay.")
                 .font(.keel(12, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)
@@ -283,10 +304,10 @@ struct ConnectionForm: View {
                     models = try await ModelCatalog.claudeModels(apiKey: key ?? "")
                 case .openAICompatible:
                     models = try await ModelCatalog.openAICompatibleModels(baseURL: URL(string: connection.baseURL ?? "")!, apiKey: key)
-                case .apple:
+                case .apple, .claudeCode:
                     models = []
                 }
-                if connection.kind != .apple, !models.isEmpty, !models.contains(connection.model) {
+                if !models.isEmpty, !models.contains(connection.model) {
                     message = ("Anahtar çalışıyor ama \(connection.modelName) bu hesapta görünmüyor. Başka bir model seç.", true)
                     return
                 }
@@ -325,19 +346,22 @@ struct ConnectionForm: View {
         clipboardKey = text
         if choice == .claude, apiKey.isEmpty, model.connection?.kind != .claude {
             message = ("Panoda bir Claude anahtarı var.", false)
+            showsKeyOptions = true
         }
     }
 
     private func loadCurrent() {
         guard let current = model.connection else { return }
         switch current.kind {
-        case .apple:
+        case .apple, .claudeCode:
             break
         case .claude:
             choice = .claude
             claudeModel = current.model
+            showsKeyOptions = true
         case .openAICompatible:
             choice = .other
+            showsKeyOptions = true
             presetID = current.presetID ?? presetID
             baseURL = current.baseURL ?? baseURL
             otherModel = current.model

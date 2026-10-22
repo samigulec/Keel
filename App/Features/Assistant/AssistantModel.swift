@@ -100,7 +100,7 @@ final class AssistantModel {
         let chat = chatID
         runTask = Task {
             do {
-                let session = try currentSession()
+                let session = try await currentSession()
                 try await session.send(message) { [weak self] event in
                     guard let self, self.chatID == chat else { return }
                     self.handle(event)
@@ -125,7 +125,7 @@ final class AssistantModel {
         runTask?.cancel()
     }
 
-    private func currentSession() throws -> any ChatSession {
+    private func currentSession() async throws -> any ChatSession {
         if let session { return session }
         guard let connection else { throw AIError.invalidResponse("Bağlantı yok") }
         let chat = chatID
@@ -136,7 +136,18 @@ final class AssistantModel {
         }
 
         let session: any ChatSession
-        if isOnDevice {
+        if connection.kind == .claudeCode {
+            let proposeTool = tools.first { $0.definition.name == "propose_cleanup" }
+            session = ClaudeCodeSession(
+                modelAlias: connection.model == "default" ? nil : connection.model,
+                gatherContext: { [status, cleanup, performance] report in
+                    await KeelContext.gather(status: status, cleanup: cleanup, performance: performance, report: report)
+                },
+                propose: { input in
+                    _ = try? await proposeTool?.run(input)
+                }
+            )
+        } else if isOnDevice {
             guard let apple = AppleIntelligence.makeSession(
                 tools: tools,
                 instructions: Self.systemPrompt + Self.onDeviceAddendum,
