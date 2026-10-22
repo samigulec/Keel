@@ -17,11 +17,11 @@ struct SmartScanView: View {
 
             HStack(alignment: .top, spacing: 16) {
                 storageCard
-                StatCard(title: "Bellek (RAM)", value: "—", detail: "Faz 1'de canlı gösterilecek")
+                StatCard(title: "Bellek (RAM)", bytes: nil, detail: "Faz 1'de canlı gösterilecek")
                 StatCard(
                     title: "Temizlenebilir",
-                    value: cleanup.lastScan == nil ? "—" : ByteFormat.string(cleanup.totalBytes),
-                    detail: cleanup.lastScan == nil ? "Taramadan sonra hesaplanır" : "Ayrıntılar Temizlik'te",
+                    bytes: cleanup.lastScan == nil ? nil : cleanup.recommendedBytes,
+                    detail: cleanup.lastScan == nil ? "Taramadan sonra hesaplanır" : "Önerilen kategoriler",
                     isDark: true
                 )
             }
@@ -50,7 +50,7 @@ struct SmartScanView: View {
                     .tracking(-0.4)
                     .foregroundStyle(Palette.hull)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Tarama yalnızca okur. Hiçbir şey sen onaylamadan silinmez; silinenler Çöp Kutusu'na taşınır, oradan geri alabilirsin.")
+                Text(detail)
                     .font(.keel(15, .medium))
                     .foregroundStyle(Palette.slate)
                     .lineSpacing(3)
@@ -97,7 +97,23 @@ struct SmartScanView: View {
         guard cleanup.totalBytes > 0 else {
             return "Her şey temiz görünüyor. Temizlenecek bir şey bulunamadı."
         }
-        return "\(ByteFormat.string(cleanup.totalBytes)) temizlenebilir alan bulundu."
+        guard cleanup.recommendedBytes > 0 else {
+            return "Önerilen kategoriler temiz. Gözden geçirmen gereken \(ByteFormat.string(cleanup.optInBytes)) var."
+        }
+        return "\(ByteFormat.string(cleanup.recommendedBytes)) güvenle temizlenebilir."
+    }
+
+    private var detail: String {
+        let safety = "Hiçbir şey sen onaylamadan silinmez; silinenler Çöp Kutusu'na taşınır, oradan geri alabilirsin."
+        guard cleanup.lastScan != nil, cleanup.optInBytes > 0 else {
+            return "Tarama yalnızca okur. " + safety
+        }
+        // Joined by hand: the system list formatter follows the Mac's language, not the app's.
+        let titles = cleanup.optInTitles
+        let places = titles.count > 1
+            ? titles.dropLast().joined(separator: ", ") + " ve " + titles[titles.count - 1]
+            : titles.first ?? ""
+        return "Ayrıca \(places) içinde \(ByteFormat.string(cleanup.optInBytes)) var; bunları Temizlik'te kendin seçebilirsin. " + safety
     }
 
     private var storageCard: some View {
@@ -117,16 +133,14 @@ struct SmartScanView: View {
 
 private struct StatCard: View {
     var title: String
-    var value: String
+    var bytes: Int64?
     var detail: String
     var isDark = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).eyebrowStyle(color: isDark ? Palette.Sidebar.eyebrow : Palette.slate)
-            Text(value)
-                .font(.keelMono(26, .semibold))
-                .foregroundStyle(isDark ? .white : Palette.hull)
+            ByteAmount(bytes: bytes, size: 26, color: isDark ? .white : Palette.hull)
             Text(detail)
                 .font(.keel(13, .medium))
                 .foregroundStyle(isDark ? Palette.Sidebar.text : Palette.slate)

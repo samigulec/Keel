@@ -31,6 +31,18 @@ final class CleanupModel {
 
     var totalBytes: Int64 { results.reduce(0) { $0 + $1.totalBytes } }
 
+    /// What a default cleanup removes: categories that are preselected.
+    var recommendedBytes: Int64 {
+        results.filter(\.category.selectedByDefault).reduce(0) { $0 + $1.totalBytes }
+    }
+
+    /// Found in categories the user must opt into (Trash, old downloads).
+    var optInBytes: Int64 { totalBytes - recommendedBytes }
+
+    var optInTitles: [String] {
+        results.filter { !$0.category.selectedByDefault && !$0.items.isEmpty }.map(\.category.title)
+    }
+
     var selectedResults: [CategoryScanResult] {
         results.filter { selection.contains($0.category.id) && !$0.items.isEmpty }
     }
