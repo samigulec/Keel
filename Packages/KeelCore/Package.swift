@@ -8,7 +8,8 @@ let package = Package(
         .library(name: "KeelCore", targets: ["KeelCore"]),
     ],
     targets: [
-        .target(name: "KeelCore"),
+        .target(name: "KeelSystemShims"),
+        .target(name: "KeelCore", dependencies: ["KeelSystemShims"]),
         .testTarget(name: "KeelCoreTests", dependencies: ["KeelCore"]),
     ]
 )
