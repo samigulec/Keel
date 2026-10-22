@@ -30,13 +30,23 @@ public struct Candidate: Sendable {
 /// Finds candidates for one cleanup category. Sources only list what they
 /// find; the scanner applies the safety policy and running-app checks.
 public protocol CandidateSource: Sendable {
+    /// Folders the source lists. If one exists but cannot be read (usually
+    /// for lack of Full Disk Access), the scanner reports it instead of
+    /// pretending the folder is empty.
+    var roots: [URL] { get }
     func candidates(in context: ScanContext) -> [Candidate]
+}
+
+extension CandidateSource {
+    public var roots: [URL] { [] }
 }
 
 private let ignoredNames: Set<String> = [".DS_Store", ".localized"]
 
 /// The direct children of a folder, e.g. each app's folder in ~/Library/Caches.
 public struct ChildrenSource: CandidateSource {
+    public var roots: [URL] { [root] }
+
     public enum Ownership: Sendable {
         case none
         case fixed(String)
@@ -95,6 +105,7 @@ public struct ChildrenSource: CandidateSource {
 
 /// Every file below a folder that has not been modified for a while, e.g. old logs.
 public struct AgedFilesSource: CandidateSource {
+    public var roots: [URL] { [root] }
     public let root: URL
     public let minimumAge: TimeInterval
 

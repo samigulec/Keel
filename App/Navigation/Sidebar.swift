@@ -52,21 +52,13 @@ private struct SidebarItem: View {
                     .font(.keel(15, isSelected ? .bold : .semibold))
                     .foregroundStyle(isSelected ? .white : Palette.Sidebar.text)
                     .lineLimit(1)
-                    .layoutPriority(1) // the title wins; the badge adapts
                 Spacer(minLength: 4)
                 if section.phase > 1 {
-                    ViewThatFits(in: .horizontal) {
-                        Text("YAKINDA")
-                            .font(.keel(9, .extraBold))
-                            .fixedSize()
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Palette.Sidebar.widgetTrack, in: Capsule())
-                        Image(systemName: "clock")
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                    .foregroundStyle(Palette.Sidebar.eyebrow)
-                    .accessibilityLabel("Yakında")
+                    Image(systemName: "clock")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Palette.Sidebar.eyebrow)
+                        .help("Yakında")
+                        .accessibilityLabel("Yakında")
                 }
             }
             .padding(.horizontal, 12)

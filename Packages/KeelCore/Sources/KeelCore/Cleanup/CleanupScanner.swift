@@ -5,12 +5,19 @@ public struct CategoryScanResult: Sendable {
     /// Largest first.
     public let items: [CleanupItem]
     public let skipped: [SkippedItem]
+    /// Folders that exist but could not be read, so the result may be incomplete.
+    public var unreadableRoots: [URL] = []
 
     public var totalBytes: Int64 { items.reduce(0) { $0 + $1.sizeBytes } }
 
     /// The same result without items that have since been cleaned.
     public func removing(_ cleaned: Set<CleanupItem>) -> CategoryScanResult {
-        CategoryScanResult(category: category, items: items.filter { !cleaned.contains($0) }, skipped: skipped)
+        CategoryScanResult(
+            category: category,
+            items: items.filter { !cleaned.contains($0) },
+            skipped: skipped,
+            unreadableRoots: unreadableRoots
+        )
     }
 }
 
@@ -48,7 +55,10 @@ public struct CleanupScanner: Sendable {
         var skipped: [SkippedItem] = []
         var seen = Set<String>()
 
+        var unreadable: [URL] = []
+
         for source in rule.sources {
+            unreadable += source.roots.filter(Self.existsButUnreadable)
             for candidate in source.candidates(in: context) {
                 try Task.checkCancellation()
                 guard seen.insert(candidate.url.standardizedFileURL.path).inserted else { continue }
@@ -77,7 +87,13 @@ public struct CleanupScanner: Sendable {
         return CategoryScanResult(
             category: rule.category,
             items: items.sorted { $0.sizeBytes > $1.sizeBytes },
-            skipped: skipped
+            skipped: skipped,
+            unreadableRoots: unreadable
         )
+    }
+
+    static func existsButUnreadable(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path)
+            && (try? FileManager.default.contentsOfDirectory(atPath: url.path)) == nil
     }
 }

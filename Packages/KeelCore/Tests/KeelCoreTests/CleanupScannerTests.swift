@@ -113,6 +113,26 @@ struct CleanupScannerTests {
         #expect(results[.userCaches].items.map(\.url.lastPathComponent) == ["com.big.app", "com.small.app"])
     }
 
+    // Root ignores file permissions, so this only runs as a normal user (macOS CI).
+    @Test(.enabled(if: getuid() != 0))
+    func reportsUnreadableFolderInsteadOfCallingItEmpty() async throws {
+        let sandbox = try Sandbox()
+        let trash = sandbox.home.appendingPathComponent(".Trash")
+        try sandbox.write(".Trash/old.zip", bytes: 8_000)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: trash.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: trash.path) }
+
+        let result = try await sandbox.scanner.scan(context: sandbox.context())[.trash]
+        #expect(result.items.isEmpty)
+        #expect(result.unreadableRoots.map(\.lastPathComponent) == [".Trash"])
+    }
+
+    @Test func readableFoldersAreNotReportedAsUnreadable() async throws {
+        let sandbox = try Sandbox()
+        let results = try await sandbox.scanner.scan(context: sandbox.context())
+        #expect(results.allSatisfy { $0.unreadableRoots.isEmpty })
+    }
+
     @Test func scanningChangesNothingOnDisk() async throws {
         let sandbox = try Sandbox()
         let cache = try sandbox.write("Library/Caches/com.spotify.client/data", bytes: 30_000)

@@ -62,6 +62,7 @@ struct CleanupView: View {
             ForEach(Array(model.results.enumerated()), id: \.element.category.id) { index, result in
                 CategoryRow(
                     result: result,
+                    appNames: model.runningAppNames,
                     isSelected: Binding(
                         get: { model.selection.contains(result.category.id) },
                         set: { isOn in
@@ -146,10 +147,12 @@ struct CleanupView: View {
 
 private struct CategoryRow: View {
     let result: CategoryScanResult
+    let appNames: [String: String]
     @Binding var isSelected: Bool
     @State private var expanded = false
 
     private var isEmpty: Bool { result.items.isEmpty }
+    private var isUnreadable: Bool { isEmpty && !result.unreadableRoots.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -169,11 +172,23 @@ private struct CategoryRow: View {
                     Text(detailText)
                         .font(.keel(13, .medium))
                         .foregroundStyle(result.category.removal == .deletePermanently ? Palette.warningText : Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let note = skipNote {
+                        Text(note)
+                            .font(.keel(13, .semibold))
+                            .foregroundStyle(Palette.slate)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Spacer(minLength: 12)
 
-                if isEmpty {
+                if isUnreadable {
+                    Text("Erişim yok")
+                        .font(.keel(14, .bold))
+                        .foregroundStyle(Palette.warningText)
+                        .help("Bu klasörü okumak için Tam Disk Erişimi gerekiyor")
+                } else if isEmpty {
                     Text("Temiz")
                         .font(.keel(14, .bold))
                         .foregroundStyle(Palette.mintText)
@@ -203,18 +218,23 @@ private struct CategoryRow: View {
                     .padding(.bottom, 16)
             }
         }
-        .opacity(isEmpty ? 0.6 : 1)
+        .opacity(isEmpty && !isUnreadable ? 0.6 : 1)
     }
 
     private var detailText: String {
-        var text = result.category.summary
-        let busy = result.skipped.filter {
-            if case .appRunning = $0.reason { true } else { false }
-        }.count
-        if busy > 0 {
-            text += " · \(busy) öğe atlandı (uygulama açık)"
+        isUnreadable
+            ? "Okunamadı: Tam Disk Erişimi gerekiyor"
+            : result.category.summary
+    }
+
+    /// "8 öğe atlandı: Xcode açık"
+    private var skipNote: String? {
+        let owners = result.skipped.compactMap { item -> String? in
+            if case .appRunning(let bundleID) = item.reason { bundleID } else { nil }
         }
-        return text
+        guard !owners.isEmpty else { return nil }
+        let names = Set(owners.map { appNames[$0] ?? $0 }).sorted()
+        return "\(owners.count) öğe atlandı: \(names.joined(separator: ", ")) açık"
     }
 }
 

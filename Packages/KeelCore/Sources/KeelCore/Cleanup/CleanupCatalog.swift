@@ -40,7 +40,7 @@ public enum CleanupCatalog {
     /// Like other Apple caches, they are left to macOS.
     static let appleServiceCaches: Set<String> = [
         "GeoServices", "PassKit", "Animoji", "askpermissiond",
-        "CloudKit", "FamilyCircle", "familycircled",
+        "CloudKit", "FamilyCircle", "familycircled", "GameKit", "AudioUnitCache",
     ]
 
     /// Not caches despite living in ~/Library/Caches: browser installs used by

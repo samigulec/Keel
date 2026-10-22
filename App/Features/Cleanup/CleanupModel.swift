@@ -19,6 +19,8 @@ final class CleanupModel {
     private(set) var lastReport: CleanupReport?
     private(set) var errorMessage: String?
     var selection: Set<CleanupCategoryID> = []
+    /// Bundle ID → app name for apps that were running during the last scan.
+    private(set) var runningAppNames: [String: String] = [:]
 
     private let status: SystemStatus
     @ObservationIgnored private var scanTask: Task<Void, Never>?
@@ -69,8 +71,12 @@ final class CleanupModel {
         errorMessage = nil
         lastReport = nil
 
-        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        let context = ScanContext(runningBundleIDs: running)
+        let apps = NSWorkspace.shared.runningApplications
+        runningAppNames = Dictionary(
+            apps.compactMap { app in app.bundleIdentifier.map { ($0, app.localizedName ?? $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let context = ScanContext(runningBundleIDs: Set(runningAppNames.keys))
         scanTask = Task {
             do {
                 // The scan's work runs in child tasks off the main actor, and
