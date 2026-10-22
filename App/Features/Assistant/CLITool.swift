@@ -80,23 +80,62 @@ final class CLITool {
 
     // MARK: Finding the tool
 
+    /// The install Keel uses. People often have several (the installer,
+    /// npm, Homebrew, conda), and an old one may not support new models, so
+    /// every one found is asked for its version and the newest wins.
     func locate() async -> URL? {
         if let cachedExecutable, FileManager.default.isExecutableFile(atPath: cachedExecutable.path) {
             return cachedExecutable
         }
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let folders = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.npm-global/bin", "\(home)/.\(command)/bin", "\(home)/.claude/local"]
-        if let found = folders.map({ "\($0)/\(command)" }).first(where: FileManager.default.isExecutableFile(atPath:)) {
-            cachedExecutable = URL(fileURLWithPath: found)
-            return cachedExecutable
+        var newest: (url: URL, version: [Int])?
+        var fallback: URL?
+        for url in await candidates() {
+            fallback = fallback ?? url
+            guard let version = await version(of: url) else { continue }
+            if newest == nil || CLIVersion.isNewer(version, than: newest!.version) {
+                newest = (url, version)
+            }
         }
-        // Apps do not get the user's shell PATH; ask a login shell instead.
-        let shell = try? await ProcessLines.run(URL(fileURLWithPath: "/bin/zsh"), arguments: ["-lc", "command -v \(command)"])
-        if let path = shell?.output.split(separator: "\n").last.map(String.init),
-           path.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: path) {
-            cachedExecutable = URL(fileURLWithPath: path)
-        }
+        cachedExecutable = newest?.url ?? fallback
         return cachedExecutable
+    }
+
+    /// Looks again next time, e.g. after the user updated or reinstalled the tool.
+    func forgetLocation() {
+        cachedExecutable = nil
+    }
+
+    func version(of executable: URL) async -> [Int]? {
+        let result = try? await ProcessLines.run(executable, arguments: ["--version"], environment: environment, mergingStandardError: true)
+        return result.flatMap { CLIVersion.parse($0.output) }
+    }
+
+    private func candidates() async -> [URL] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var folders = [
+            "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.npm-global/bin",
+            "\(home)/.\(command)/bin", "\(home)/.claude/local", "\(home)/.bun/bin", "\(home)/.volta/bin",
+            "\(home)/miniconda3/bin", "\(home)/anaconda3/bin", "\(home)/opt/anaconda3/bin", "\(home)/miniforge3/bin",
+        ]
+        // Node version managers keep one folder per Node version.
+        let nvm = "\(home)/.nvm/versions/node"
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvm) {
+            folders += versions.map { "\(nvm)/\($0)/bin" }
+        }
+        var paths = folders.map { "\($0)/\(command)" }
+        // Apps do not get the user's shell PATH; ask a login shell too.
+        if let shell = try? await ProcessLines.run(URL(fileURLWithPath: "/bin/zsh"), arguments: ["-lc", "whence -ap \(command)"]) {
+            paths = shell.output.split(separator: "\n").map(String.init).filter { $0.hasPrefix("/") } + paths
+        }
+
+        var seen: Set<String> = []
+        return paths.compactMap { path in
+            guard FileManager.default.isExecutableFile(atPath: path) else { return nil }
+            let url = URL(fileURLWithPath: path)
+            // The same install is often linked from several folders.
+            guard seen.insert(url.resolvingSymlinksInPath().path).inserted else { return nil }
+            return url
+        }
     }
 
     /// Common install folders on PATH, and no API key variables, so the

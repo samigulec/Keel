@@ -94,3 +94,46 @@ public enum CLIErrorText {
             || text.contains("hit your limit") || text.contains("429")
     }
 }
+
+/// Version numbers that command line tools print, e.g. "2.1.308 (Claude Code)"
+/// or "codex-cli 0.130.0", for picking the newest of several installs.
+public enum CLIVersion {
+    public static func parse(_ text: String) -> [Int]? {
+        let scalars = Array(text.unicodeScalars)
+        var index = 0
+        while index < scalars.count {
+            guard CharacterSet.decimalDigits.contains(scalars[index]) else {
+                index += 1
+                continue
+            }
+            var parts: [Int] = []
+            var current = ""
+            while index < scalars.count {
+                let scalar = scalars[index]
+                if CharacterSet.decimalDigits.contains(scalar) {
+                    current.unicodeScalars.append(scalar)
+                } else if scalar == ".", !current.isEmpty {
+                    parts.append(Int(current) ?? 0)
+                    current = ""
+                } else {
+                    break
+                }
+                index += 1
+            }
+            if !current.isEmpty { parts.append(Int(current) ?? 0) }
+            // A bare number is not a version; keep looking.
+            if parts.count >= 2 { return parts }
+        }
+        return nil
+    }
+
+    /// Whether `a` is newer than `b`; missing parts count as zero.
+    public static func isNewer(_ a: [Int], than b: [Int]) -> Bool {
+        for index in 0..<max(a.count, b.count) {
+            let left = index < a.count ? a[index] : 0
+            let right = index < b.count ? b[index] : 0
+            if left != right { return left > right }
+        }
+        return false
+    }
+}

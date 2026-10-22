@@ -59,8 +59,8 @@ final class Accounts {
         loginTasks[kind]?.cancel()
         phases[kind] = .signingIn(link: nil)
         loginTasks[kind] = Task {
-            let output = try? await tool.startLogin { [weak self] link in
-                self?.phases[kind] = .signingIn(link: link)
+            let output = try? await tool.startLogin { link in
+                self.phases[kind] = .signingIn(link: link)
             }
             // Poll until the tool reports the account, for up to five minutes.
             for _ in 0..<150 where !Task.isCancelled {

@@ -135,4 +135,15 @@ struct CodexTests {
         #expect(CLIErrorText.longContextBase(of: "claude-opus-4-6[1m]") == "claude-opus-4-6")
         #expect(CLIErrorText.longContextBase(of: "claude-opus-4-6") == nil)
     }
+
+    @Test func picksTheNewestInstall() {
+        #expect(CLIVersion.parse("2.1.308 (Claude Code)") == [2, 1, 308])
+        #expect(CLIVersion.parse("codex-cli 0.130.0") == [0, 130, 0])
+        #expect(CLIVersion.parse("build 7, version 1.2") == [1, 2])
+        #expect(CLIVersion.parse("no version here") == nil)
+        #expect(CLIVersion.isNewer([2, 1, 308], than: [2, 1, 71]))
+        #expect(!CLIVersion.isNewer([2, 1, 71], than: [2, 1, 308]))
+        #expect(CLIVersion.isNewer([2, 2], than: [2, 1, 999]))
+        #expect(!CLIVersion.isNewer([2, 1, 0], than: [2, 1]))
+    }
 }

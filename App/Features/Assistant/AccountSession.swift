@@ -44,13 +44,16 @@ final class AccountSession: ChatSession {
     }
 
     private var tool: CLITool { kind == .claudeCode ? .claude : .codex }
+    /// The install that ran the last message, to name it in errors.
+    private var lastExecutablePath: String?
     private var providerName: String { kind == .claudeCode ? "Claude" : "ChatGPT" }
 
     func send(_ text: String, onEvent: (AssistantEvent) -> Void) async throws {
-        guard await tool.locate() != nil else {
+        guard let executable = await tool.locate() else {
             throw Failure(message: "\(tool.command) bulunamadı. Sağdaki \(providerName) kartından kurulumu kontrol et.")
         }
 
+        lastExecutablePath = executable.path
         let context = await gatherContext(onEvent)
         try Task.checkCancellation()
 
@@ -219,6 +222,13 @@ final class AccountSession: ChatSession {
 
     private func describe(_ message: String) -> String {
         let detail = String(message.trimmingCharacters(in: .whitespacesAndNewlines).prefix(400))
+        let lowered = detail.lowercased()
+        if lowered.contains("version_too_old") || (lowered.contains("update") && lowered.contains("version")) {
+            // Look for a newer install next time, e.g. after `claude update`.
+            tool.forgetLocation()
+            let path = lastExecutablePath.map { " Keel'in kullandığı: \($0)." } ?? ""
+            return "\(tool.command) çok eski ve bu modeli desteklemiyor.\(path) Terminal'de `\(tool.command) update` çalıştırıp tekrar dene; Keel bir sonraki mesajda en yeni kurulumu yeniden arar."
+        }
         if CLIErrorText.isModelUnavailable(detail) {
             return "Bu model hesabında açık değil: \(detail)"
         }
