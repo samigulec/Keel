@@ -13,7 +13,8 @@ struct AIConnection: Codable, Equatable {
         case apple
     }
 
-    /// The model id that means "whatever the account uses by default".
+    /// The model id that means "whatever the account uses by default". Keel
+    /// only falls back to it when its own default is not open to the account.
     static let accountDefault = "default"
 
     /// How hard the model thinks; more effort is slower and uses more of the plan.
@@ -38,21 +39,27 @@ struct AIConnection: Codable, Equatable {
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
     ]
 
-    static let recommendedClaudeModel = "claude-opus-5-5"
-    static let recommendedModels: Set<String> = [recommendedClaudeModel, "gpt-6.1-sol"]
+    /// Keel starts each provider on its best model.
+    static func defaultModel(for kind: Kind) -> String {
+        switch kind {
+        case .claudeCode: "claude-opus-5-5"
+        case .chatGPT: "gpt-6.1-sol"
+        case .apple: "on-device"
+        }
+    }
 
     var kind: Kind
     var model: String
     /// nil keeps the provider's default.
     var effort: String?
 
-    init(kind: Kind, model: String = AIConnection.accountDefault, effort: String? = nil) {
+    init(kind: Kind, model: String? = nil, effort: String? = nil) {
         self.kind = kind
-        self.model = model
+        self.model = model ?? Self.defaultModel(for: kind)
         self.effort = effort
     }
 
-    static let apple = AIConnection(kind: .apple, model: "on-device")
+    static let apple = AIConnection(kind: .apple)
 
     var supportsEffort: Bool { kind != .apple }
 
@@ -63,15 +70,17 @@ struct AIConnection: Codable, Equatable {
 
     /// Models the picker offers for this provider, as (id, name).
     var modelChoices: [(id: String, name: String)] {
-        let numbered: [String]
         switch kind {
-        case .apple: return [("on-device", "Cihazdaki model")]
-        case .claudeCode: numbered = Self.claudeModelIDs
-        case .chatGPT: numbered = Self.chatGPTModelIDs
+        case .apple: [("on-device", "Cihazdaki model")]
+        case .claudeCode: Self.claudeModelIDs.map { ($0, ModelNames.display($0)) }
+        case .chatGPT: Self.chatGPTModelIDs.map { ($0, ModelNames.display($0)) }
         }
-        let learned = Self.learnedDefault(for: kind).map { " (\(ModelNames.display($0)))" } ?? ""
-        return [(Self.accountDefault, "Hesabın varsayılanı" + learned)]
-            + numbered.map { ($0, ModelNames.display($0)) }
+    }
+
+    /// "Hesabın varsayılanı (Opus 4.6)", for when Keel fell back to it.
+    static func accountDefaultName(for kind: Kind) -> String {
+        let learned = learnedDefault(for: kind).map { " (\(ModelNames.display($0)))" } ?? ""
+        return "Hesabın varsayılanı" + learned
     }
 
     var providerName: String {
@@ -110,8 +119,19 @@ struct AIConnection: Codable, Equatable {
 
     /// The saved choice; one from an older Keel that no longer exists reads as none.
     static func load() -> AIConnection? {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return nil }
-        return try? JSONDecoder().decode(AIConnection.self, from: data)
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+              var saved = try? JSONDecoder().decode(AIConnection.self, from: data) else { return nil }
+        // Earlier versions started on the account's default model; move once
+        // to Keel's default. A later fallback to the account default stays.
+        let migrated = "keel.ai.startsOnKeelDefault"
+        if !UserDefaults.standard.bool(forKey: migrated) {
+            UserDefaults.standard.set(true, forKey: migrated)
+            if saved.usesAccountDefault {
+                saved.model = defaultModel(for: saved.kind)
+                saved.save()
+            }
+        }
+        return saved
     }
 
     func save() {

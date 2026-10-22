@@ -604,7 +604,7 @@ private struct ModelPicker: View {
                 if model.accounts.isReady(browsing) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
-                            ForEach(AIConnection(kind: browsing).modelChoices, id: \.id) { choice in
+                            ForEach(choices, id: \.id) { choice in
                                 modelRow(choice)
                             }
                         }
@@ -617,6 +617,16 @@ private struct ModelPicker: View {
         }
         .frame(height: 420)
         .background(Palette.card)
+    }
+
+    /// The numbered models, plus the account's default while Keel is using
+    /// it because the chosen model was not open to the account.
+    private var choices: [(id: String, name: String)] {
+        var choices = AIConnection(kind: browsing).modelChoices
+        if let connection = model.connection, connection.kind == browsing, connection.usesAccountDefault {
+            choices.insert((AIConnection.accountDefault, AIConnection.accountDefaultName(for: browsing)), at: 0)
+        }
+        return choices
     }
 
     private var notReady: some View {
@@ -652,10 +662,8 @@ private struct ModelPicker: View {
                     .foregroundStyle(Palette.hull)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                if AIConnection.recommendedModels.contains(choice.id) {
-                    Pill(text: "ÖNERİLEN")
-                } else if choice.id == AIConnection.learnedDefault(for: browsing) {
-                    Pill(text: "VARSAYILAN", background: Palette.track, foreground: Palette.slate)
+                if browsing != .apple, choice.id == AIConnection.defaultModel(for: browsing) {
+                    Pill(text: "VARSAYILAN")
                 }
             }
             .padding(.horizontal, 14)
