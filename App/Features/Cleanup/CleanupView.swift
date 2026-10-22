@@ -405,7 +405,7 @@ private struct ReportBanner: View {
 
     private var detail: String {
         var parts = ["\(report.removed.count) öğe kaldırıldı"]
-        if !report.skipped.isEmpty { parts.append("\(report.skipped.count) öğe güvenlik nedeniyle atlandı") }
+        if !report.skipped.isEmpty { parts.append("\(report.skipped.count) öğe atlandı (uygulaması açık ya da güvenlik kuralı izin vermedi)") }
         if !report.failed.isEmpty { parts.append("\(report.failed.count) öğe kaldırılamadı") }
         return parts.joined(separator: " · ")
     }

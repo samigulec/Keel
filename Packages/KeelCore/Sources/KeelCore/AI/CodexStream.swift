@@ -80,6 +80,14 @@ public enum CLIErrorText {
         return signals.contains { text.contains($0) }
     }
 
+    /// "claude-opus-4-6[1m]" -> "claude-opus-4-6": the standard variant of a
+    /// long-context model, which plans often limit separately.
+    public static func longContextBase(of model: String) -> String? {
+        guard model.hasSuffix("]"), let open = model.lastIndex(of: "[") else { return nil }
+        let base = String(model[..<open])
+        return base.isEmpty ? nil : base
+    }
+
     public static func isUsageLimit(_ message: String) -> Bool {
         let text = message.lowercased()
         return text.contains("usage limit") || text.contains("rate limit") || text.contains("limit reached")

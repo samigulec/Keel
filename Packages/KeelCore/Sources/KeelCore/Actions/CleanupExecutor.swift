@@ -39,7 +39,13 @@ public struct CleanupExecutor: Sendable {
         )
     }
 
-    public func perform(_ items: [CleanupItem], now: @Sendable () -> Date = Date.init) -> CleanupReport {
+    /// Removes the items. `runningBundleIDs` are the apps open right now: an
+    /// app may have been opened since the scan, and its files are left alone.
+    public func perform(
+        _ items: [CleanupItem],
+        runningBundleIDs: Set<String> = [],
+        now: @Sendable () -> Date = Date.init
+    ) -> CleanupReport {
         var report = CleanupReport()
 
         for item in items {
@@ -54,6 +60,11 @@ public struct CleanupExecutor: Sendable {
                 ))
             }
 
+            if let owner = item.owner, let running = CleanupScanner.runningApp(owning: owner, in: runningBundleIDs) {
+                report.skipped.append(SkippedItem(url: item.url, reason: .appRunning(bundleID: running)))
+                record(.skipped, "\(running) is running")
+                continue
+            }
             if case .denied(let reason) = policy.evaluate(item.url) {
                 report.skipped.append(SkippedItem(url: item.url, reason: .denied(reason)))
                 record(.skipped, reason.description)

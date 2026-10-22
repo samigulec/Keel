@@ -79,7 +79,8 @@ public struct CleanupScanner: Sendable {
                     category: rule.category.id,
                     removal: rule.category.removal,
                     sizeBytes: size,
-                    lastActivity: candidate.lastActivity
+                    lastActivity: candidate.lastActivity,
+                    owner: candidate.owner
                 ))
             }
         }

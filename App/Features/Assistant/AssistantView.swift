@@ -34,7 +34,7 @@ struct AssistantView: View {
             titleVisibility: .visible
         ) {
             Button("Temizle", role: model.pendingPermanentBytes > 0 ? ButtonRole.destructive : nil) {
-                Task { await model.applyPendingCleanup() }
+                model.confirmPendingCleanup()
             }
             Button("Vazgeç", role: .cancel) { model.cancelPendingCleanup() }
         } message: {
@@ -325,7 +325,11 @@ private struct ProposalCard: View {
             .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.border) }
 
-            if let freedBytes {
+            if let freedBytes, freedBytes == 0 {
+                Label("Hiçbir şey temizlenmedi; nedeni aşağıda.", systemImage: "exclamationmark.circle.fill")
+                    .font(.keel(14, .bold))
+                    .foregroundStyle(Palette.warningText)
+            } else if let freedBytes {
                 Label("\(ByteFormat.string(freedBytes)) temizlendi", systemImage: "checkmark.circle.fill")
                     .font(.keel(14, .bold))
                     .foregroundStyle(Palette.mintText)

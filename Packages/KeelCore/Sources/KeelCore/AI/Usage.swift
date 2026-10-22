@@ -53,6 +53,11 @@ public enum ModelPricing {
 public enum ModelNames {
     /// "claude-opus-5-5" -> "Opus 5.5", "gpt-6.1-sol" -> "GPT-6.1 Sol".
     public static func display(_ id: String) -> String {
+        // Claude Code marks long-context variants, e.g. "claude-opus-4-6[1m]".
+        if id.hasSuffix("]"), let open = id.lastIndex(of: "[") {
+            let tag = id[id.index(after: open)..<id.index(before: id.endIndex)]
+            return display(String(id[..<open])) + " · " + tag.uppercased()
+        }
         if id.hasPrefix("gpt-") {
             let parts = id.dropFirst("gpt-".count).split(separator: "-")
             guard let version = parts.first else { return id }

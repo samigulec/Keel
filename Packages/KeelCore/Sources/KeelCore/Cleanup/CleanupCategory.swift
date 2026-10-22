@@ -40,13 +40,17 @@ public struct CleanupItem: Identifiable, Hashable, Sendable {
     public let removal: Removal
     public let sizeBytes: Int64
     public let lastActivity: Date?
+    /// Bundle id of the app the item belongs to, if known; it is not removed
+    /// while that app runs.
+    public let owner: String?
 
-    public init(url: URL, category: CleanupCategoryID, removal: Removal, sizeBytes: Int64, lastActivity: Date? = nil) {
+    public init(url: URL, category: CleanupCategoryID, removal: Removal, sizeBytes: Int64, lastActivity: Date? = nil, owner: String? = nil) {
         self.url = url
         self.category = category
         self.removal = removal
         self.sizeBytes = sizeBytes
         self.lastActivity = lastActivity
+        self.owner = owner
     }
 }
 

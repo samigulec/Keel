@@ -35,6 +35,20 @@ struct CleanupExecutorTests {
         #expect(caches.removing(Set(report.removed)).items.isEmpty)
     }
 
+    @Test func leavesFilesOfAppsOpenedSinceTheScan() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("Library/Caches/com.spotify.client/data", bytes: 30_000)
+        let remover = try RecordingRemover(bin: sandbox.outside.appendingPathComponent("bin"))
+        let caches = try await sandbox.scanner.scan(context: sandbox.context())[.userCaches]
+        #expect(caches.items.first?.owner == "com.spotify.client")
+
+        let report = executor(sandbox, remover: remover).perform(caches.items, runningBundleIDs: ["com.spotify.client"])
+
+        #expect(report.removed.isEmpty)
+        #expect(report.skipped.map(\.reason) == [.appRunning(bundleID: "com.spotify.client")])
+        #expect(remover.trashed.isEmpty)
+    }
+
     @Test func rechecksPolicyWhenDiskChangedAfterScan() async throws {
         let sandbox = try Sandbox()
         let data = try sandbox.write("Library/Caches/com.spotify.client/data", bytes: 30_000)

@@ -189,15 +189,12 @@ final class AssistantModel {
                 propose: { input in
                     _ = try? await proposeTool?.run(input)
                 },
-                modelUnavailable: { [weak self] unavailable in
+                fellBack: { [weak self] model, notice in
                     guard let self, self.chatID == chat, var current = self.connection else { return }
-                    current.model = AIConnection.accountDefault
+                    current.model = model ?? AIConnection.accountDefault
                     current.save()
                     self.connection = current
-                    self.items.append(ChatItem(
-                        kind: .notice(isError: false),
-                        text: "\(ModelNames.display(unavailable)) hesabında açık değil; hesabının varsayılan modeliyle devam ediyorum."
-                    ))
+                    self.items.append(ChatItem(kind: .notice(isError: false), text: notice))
                 }
             )
         }
@@ -281,11 +278,49 @@ final class AssistantModel {
         pendingCleanup = nil
     }
 
-    func applyPendingCleanup() async {
+    /// Starts the confirmed cleanup. The items are taken right away, because
+    /// the dialog clears what is pending as it closes.
+    func confirmPendingCleanup() {
         guard let pending = pendingCleanup else { return }
         pendingCleanup = nil
-        guard let report = await cleanup.cleanAndWait(items: pending.items) else { return }
-        appliedProposals[pending.proposal.id] = report.freedBytes
+        let chat = chatID
+        Task {
+            let report = await cleanup.cleanAndWait(items: pending.items)
+            guard chatID == chat else { return }
+            describeCleanup(of: pending.proposal, report)
+        }
+    }
+
+    /// Says in the chat what the cleanup did, including what it left alone and why.
+    private func describeCleanup(of proposal: CleanupProposal, _ report: CleanupReport?) {
+        guard let report else {
+            items.append(ChatItem(
+                kind: .notice(isError: true),
+                text: "Temizlik başlamadı: başka bir tarama ya da temizlik sürüyor, veya bu öğeler son taramada artık yok. Biraz sonra tekrar dene."
+            ))
+            return
+        }
+        appliedProposals[proposal.id] = report.freedBytes
+
+        var lines: [String] = []
+        for skipped in report.skipped {
+            let name = skipped.url.lastPathComponent
+            switch skipped.reason {
+            case .appRunning(let bundleID):
+                let app = cleanup.runningAppNames[bundleID] ?? bundleID
+                lines.append("\(name): \(app) açık olduğu için atlandı. Uygulamayı kapatıp tekrar dene.")
+            case .denied(let reason):
+                lines.append("\(name): güvenlik kuralı izin vermedi (\(reason)).")
+            case .permanentDeletionNotAllowed:
+                lines.append("\(name): kalıcı silmeye izin verilmeyen bir yerde.")
+            }
+        }
+        for failure in report.failed {
+            lines.append("\(failure.item.url.lastPathComponent): \(failure.message)")
+        }
+        if !lines.isEmpty {
+            items.append(ChatItem(kind: .notice(isError: report.removed.isEmpty), text: lines.joined(separator: "\n")))
+        }
     }
 
     var pendingBytes: Int64 { pendingCleanup?.items.reduce(0) { $0 + $1.sizeBytes } ?? 0 }

@@ -46,6 +46,7 @@ struct ClaudeCodeTests {
         #expect(ModelNames.display("llama3.2") == "llama3.2")
         #expect(ModelNames.display("gpt-6.1-sol") == "GPT-6.1 Sol")
         #expect(ModelNames.display("gpt-5.5") == "GPT-5.5")
+        #expect(ModelNames.display("claude-opus-4-6[1m]") == "Opus 4.6 · 1M")
     }
 
     @Test func hidesProposalBlockSplitAcrossChunks() {
@@ -130,5 +131,8 @@ struct CodexTests {
         #expect(!CLIErrorText.isModelUnavailable("Overloaded"))
         #expect(CLIErrorText.needsLogin("Not logged in · Please run /login"))
         #expect(CLIErrorText.isUsageLimit("You've hit your usage limit."))
+        #expect(CLIErrorText.isUsageLimit("API Error: Rate limit reached"))
+        #expect(CLIErrorText.longContextBase(of: "claude-opus-4-6[1m]") == "claude-opus-4-6")
+        #expect(CLIErrorText.longContextBase(of: "claude-opus-4-6") == nil)
     }
 }

@@ -10,6 +10,8 @@ import KeelCore
 final class AccountSession: ChatSession {
     struct Failure: LocalizedError {
         let message: String
+        /// The model that was answering, when the tool said which.
+        var model: String?
         var errorDescription: String? { message }
     }
 
@@ -19,9 +21,9 @@ final class AccountSession: ChatSession {
     var effort: String?
     private let gatherContext: @MainActor ((AssistantEvent) -> Void) async -> JSONValue
     private let propose: @MainActor (JSONValue) async -> Void
-    /// Called when the chosen model is not open to this account and Keel
-    /// fell back to the account's default.
-    private let modelUnavailable: @MainActor (String) -> Void
+    /// Called when Keel moved to another model to get an answer: the new
+    /// model (nil for the account's default) and a line for the user.
+    private let fellBack: @MainActor (_ model: String?, _ notice: String) -> Void
     private var conversationID: String?
 
     init(
@@ -30,7 +32,7 @@ final class AccountSession: ChatSession {
         effort: String?,
         gatherContext: @escaping @MainActor ((AssistantEvent) -> Void) async -> JSONValue,
         propose: @escaping @MainActor (JSONValue) async -> Void,
-        modelUnavailable: @escaping @MainActor (String) -> Void
+        fellBack: @escaping @MainActor (_ model: String?, _ notice: String) -> Void
     ) {
         precondition(kind != .apple, "Apple Intelligence runs in-process")
         self.kind = kind
@@ -38,7 +40,7 @@ final class AccountSession: ChatSession {
         self.effort = effort
         self.gatherContext = gatherContext
         self.propose = propose
-        self.modelUnavailable = modelUnavailable
+        self.fellBack = fellBack
     }
 
     private var tool: CLITool { kind == .claudeCode ? .claude : .codex }
@@ -66,7 +68,15 @@ final class AccountSession: ChatSession {
             // The account cannot use the chosen model; its default can answer instead.
             let unavailable = model!
             model = nil
-            modelUnavailable(unavailable)
+            fellBack(nil, "\(ModelNames.display(unavailable)) hesabında açık değil; hesabının varsayılan modeliyle devam ediyorum.")
+            try await run(prompt, onEvent: onEvent)
+        } catch let failure as Failure where CLIErrorText.isUsageLimit(failure.message)
+            && failure.model.flatMap(CLIErrorText.longContextBase(of:)) != nil {
+            // Plans often limit the 1M-context variant on its own; the standard one may still answer.
+            let longContext = failure.model!
+            let standard = CLIErrorText.longContextBase(of: longContext)!
+            model = standard
+            fellBack(standard, "\(ModelNames.display(longContext)) sınıra takıldı; standart \(ModelNames.display(standard)) ile deniyorum.")
             try await run(prompt, onEvent: onEvent)
         }
     }
@@ -116,12 +126,15 @@ final class AccountSession: ChatSession {
 
         var parser = ClaudeCodeStreamParser()
         var outcome: (isError: Bool, message: String)?
+        var answering: String?
         do {
             for try await line in try await tool.stream(arguments) {
                 for event in parser.consume(line) {
                     switch event {
                     case .text(let chunk): Self.emit(chunk, filter: &filter, onEvent: onEvent)
-                    case .started(let model): onEvent(.usage(TurnUsage(model: model)))
+                    case .started(let model):
+                        answering = model
+                        onEvent(.usage(TurnUsage(model: model)))
                     case .usage(let usage): onEvent(.usage(usage))
                     case .retry: break
                     case .result(let id, let isError, let message):
@@ -133,12 +146,12 @@ final class AccountSession: ChatSession {
         } catch let failure as ProcessFailure {
             // Claude Code reports most errors in its result line, then exits with 1.
             if let outcome, outcome.isError {
-                throw Failure(message: describe(outcome.message))
+                throw Failure(message: describe(outcome.message), model: answering)
             }
-            throw Failure(message: describe(failure))
+            throw Failure(message: describe(failure), model: answering)
         }
         if let outcome, outcome.isError {
-            throw Failure(message: describe(outcome.message))
+            throw Failure(message: describe(outcome.message), model: answering)
         }
         if conversationID == nil, let newID, outcome != nil { conversationID = newID }
     }
@@ -210,7 +223,8 @@ final class AccountSession: ChatSession {
             return "Bu model hesabında açık değil: \(detail)"
         }
         if CLIErrorText.isUsageLimit(detail) {
-            return "\(providerName) kullanım sınırına ulaşıldı: \(detail)"
+            let other = kind == .claudeCode ? "ChatGPT" : "Claude"
+            return "\(providerName) planının kullanım sınırına ulaşıldı (\(detail)). Sınır birkaç saat içinde yenilenir; bu arada \(other) ya da Apple Intelligence'a geçebilirsin."
         }
         if CLIErrorText.needsLogin(detail) {
             return "\(providerName) hesabına yeniden giriş gerekiyor. Sağdaki \(providerName) kartından \"Giriş yap\"a bas.\n\(detail)"

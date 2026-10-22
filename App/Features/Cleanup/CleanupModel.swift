@@ -89,11 +89,7 @@ final class CleanupModel {
         errorMessage = nil
         lastReport = nil
 
-        let apps = NSWorkspace.shared.runningApplications
-        runningAppNames = Dictionary(
-            apps.compactMap { app in app.bundleIdentifier.map { ($0, app.localizedName ?? $0) } },
-            uniquingKeysWith: { first, _ in first }
-        )
+        refreshRunningApps()
         let context = ScanContext(runningBundleIDs: Set(runningAppNames.keys))
         let task = Task {
             do {
@@ -132,13 +128,17 @@ final class CleanupModel {
     @discardableResult
     func cleanAndWait(items: [CleanupItem]) async -> CleanupReport? {
         guard phase == .ready else { return nil }
-        let current = Set(results.flatMap(\.items))
-        let valid = items.filter(current.contains)
+        // Match by path: a rescan may have changed sizes or dates since.
+        let current = Dictionary(results.flatMap(\.items).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let valid = items.compactMap { current[$0.id] }
         guard !valid.isEmpty else { return nil }
         phase = .cleaning
 
+        // Apps opened since the scan keep their files.
+        refreshRunningApps()
+        let running = Set(runningAppNames.keys)
         let report = await Task.detached(priority: .userInitiated) {
-            CleanupExecutor.standard().perform(valid)
+            CleanupExecutor.standard().perform(valid, runningBundleIDs: running)
         }.value
         let cleaned = Set(report.removed)
         results = results.map { $0.removing(cleaned) }
@@ -146,5 +146,13 @@ final class CleanupModel {
         phase = .ready
         status.refresh()
         return report
+    }
+
+    private func refreshRunningApps() {
+        let apps = NSWorkspace.shared.runningApplications
+        runningAppNames = Dictionary(
+            apps.compactMap { app in app.bundleIdentifier.map { ($0, app.localizedName ?? $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 }

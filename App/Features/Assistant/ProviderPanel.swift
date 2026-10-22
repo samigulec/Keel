@@ -178,9 +178,9 @@ private struct ProviderCard: View {
         case (_, .signedIn(let detail?)):
             return detail
         case (.chatGPT, _):
-            return "ChatGPT hesabınla, Codex üzerinden"
+            return "ChatGPT hesabın, Codex ile"
         default:
-            return "Claude hesabınla, Claude Code üzerinden"
+            return "Claude hesabın, Claude Code ile"
         }
     }
 
@@ -196,8 +196,10 @@ private struct ProviderCard: View {
             return ("Tarayıcıda girişi tamamla…", .busy)
         case .signedIn:
             if isCurrent, let connection = model.connection {
-                let name = model.stats.model.map(ModelNames.display) ?? connection.modelName
-                return ("Kullanılıyor · \(name)", .positive)
+                // Codex does not say which model its default is; leave it out then.
+                let name = model.stats.model.map(ModelNames.display)
+                    ?? (connection.usesAccountDefault && AIConnection.learnedDefault(for: kind) == nil ? nil : connection.modelName)
+                return (name.map { "Kullanılıyor · \($0)" } ?? "Kullanılıyor", .positive)
             }
             return (kind == .apple ? "Hazır · ücretsiz" : "Girişli", .positive)
         }
