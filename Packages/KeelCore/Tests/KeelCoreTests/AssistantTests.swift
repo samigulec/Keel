@@ -269,3 +269,39 @@ struct AssistantTests {
         #expect(request.value(forHTTPHeaderField: "authorization") == "Bearer sk-test")
     }
 }
+
+struct StubHTTPClient: HTTPClient {
+    let status: Int
+    let body: String
+
+    func data(for request: URLRequest) async throws -> (Data, Int) {
+        (Data(body.utf8), status)
+    }
+}
+
+@Suite("ModelCatalog")
+struct ModelCatalogTests {
+    @Test func listsClaudeModels() async throws {
+        let client = StubHTTPClient(status: 200, body: #"{"data":[{"type":"model","id":"claude-opus-5-5","display_name":"Claude Opus 5.5"},{"type":"model","id":"claude-haiku-5-5"}],"has_more":false}"#)
+        #expect(try await ModelCatalog.claudeModels(apiKey: "k", client: client) == ["claude-opus-5-5", "claude-haiku-5-5"])
+    }
+
+    @Test func badKeyIsAnHTTPError() async throws {
+        let client = StubHTTPClient(status: 401, body: #"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#)
+        await #expect(throws: AIError.http(status: 401, message: "invalid x-api-key")) {
+            try await ModelCatalog.claudeModels(apiKey: "bad", client: client)
+        }
+    }
+
+    @Test func listsOpenAICompatibleModels() async throws {
+        let client = StubHTTPClient(status: 200, body: #"{"object":"list","data":[{"id":"llama3.2","object":"model"}]}"#)
+        let models = try await ModelCatalog.openAICompatibleModels(baseURL: URL(string: "http://localhost:11434/v1")!, apiKey: nil, client: client)
+        #expect(models == ["llama3.2"])
+    }
+
+    @Test func unexpectedBodyIsReported() {
+        #expect(throws: AIError.invalidResponse("Model listesi okunamadı")) {
+            try ModelCatalog.parseModelIDs(#"{"models":[]}"#)
+        }
+    }
+}

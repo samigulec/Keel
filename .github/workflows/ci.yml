@@ -15,10 +15,18 @@ jobs:
       - run: swift test --package-path Packages/KeelCore
 
   app-macos:
-    name: App build + tests (macOS)
-    runs-on: macos-15
+    name: App build + tests (${{ matrix.os }})
+    # macos-15 ships Xcode 16 (no FoundationModels); macos-26 ships Xcode 26,
+    # which compiles the Apple Intelligence code paths.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: KeelCore tests
