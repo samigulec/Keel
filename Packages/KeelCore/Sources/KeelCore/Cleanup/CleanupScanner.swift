@@ -7,6 +7,11 @@ public struct CategoryScanResult: Sendable {
     public let skipped: [SkippedItem]
 
     public var totalBytes: Int64 { items.reduce(0) { $0 + $1.sizeBytes } }
+
+    /// The same result without items that have since been cleaned.
+    public func removing(_ cleaned: Set<CleanupItem>) -> CategoryScanResult {
+        CategoryScanResult(category: category, items: items.filter { !cleaned.contains($0) }, skipped: skipped)
+    }
 }
 
 /// Finds what can be cleaned. Scanning only reads; nothing is changed on disk.

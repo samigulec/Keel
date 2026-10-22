@@ -71,6 +71,24 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Keel Green on dark surfaces, e.g. the "Temizle" button in the summary panel.
+struct AccentButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        EnabledAware {
+            configuration.label
+                .font(.keel(16, .extraBold))
+                .foregroundStyle(Palette.hull)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(Palette.keelGreen, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .opacity(configuration.isPressed ? 0.85 : 1)
+        }
+    }
+}
+
+extension ButtonStyle where Self == AccentButtonStyle {
+    static var keelAccent: AccentButtonStyle { AccentButtonStyle() }
+}
+
 extension ButtonStyle where Self == PrimaryButtonStyle {
     static var keelPrimary: PrimaryButtonStyle { PrimaryButtonStyle() }
 }

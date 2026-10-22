@@ -4,6 +4,7 @@ import SwiftUI
 struct SmartScanView: View {
     var openCleanup: () -> Void
     @Environment(SystemStatus.self) private var status
+    @Environment(CleanupModel.self) private var cleanup
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -17,7 +18,12 @@ struct SmartScanView: View {
             HStack(alignment: .top, spacing: 16) {
                 storageCard
                 StatCard(title: "Bellek (RAM)", value: "—", detail: "Faz 1'de canlı gösterilecek")
-                StatCard(title: "Temizlenebilir", value: "—", detail: "Taramadan sonra hesaplanır", isDark: true)
+                StatCard(
+                    title: "Temizlenebilir",
+                    value: cleanup.lastScan == nil ? "—" : ByteFormat.string(cleanup.totalBytes),
+                    detail: cleanup.lastScan == nil ? "Taramadan sonra hesaplanır" : "Ayrıntılar Temizlik'te",
+                    isDark: true
+                )
             }
         }
     }
@@ -26,16 +32,20 @@ struct SmartScanView: View {
         HStack(alignment: .center, spacing: 40) {
             ZStack {
                 Circle().stroke(Palette.track, lineWidth: 16)
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 44, weight: .semibold))
-                    .foregroundStyle(Palette.keelGreen)
+                if cleanup.phase == .scanning {
+                    ProgressView().controlSize(.large)
+                } else {
+                    Image(systemName: cleanup.lastScan == nil ? "magnifyingglass" : "checkmark")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(Palette.keelGreen)
+                }
             }
             .frame(width: 180, height: 180)
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 14) {
-                Pill(text: "Henüz taranmadı", background: Palette.track, foreground: Palette.slate)
-                Text("Bilgisayarını tarayıp neyin yer kapladığını ve neyin güvenle temizlenebileceğini göstereceğiz.")
+                statePill
+                Text(headline)
                     .font(.keel(26, .extraBold))
                     .tracking(-0.4)
                     .foregroundStyle(Palette.hull)
@@ -46,20 +56,48 @@ struct SmartScanView: View {
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
-                    Button {} label: {
-                        Label("Taramayı başlat", systemImage: "magnifyingglass")
-                    }
-                    .buttonStyle(.keelPrimary)
-                    .disabled(true)
-                    .help("Tarama motoru Faz 1'de geliyor")
+                    if cleanup.lastScan != nil, cleanup.phase != .scanning {
+                        Button("Sonuçları gör", action: openCleanup)
+                            .buttonStyle(.keelPrimary)
+                        Button("Yeniden tara", action: cleanup.scan)
+                            .buttonStyle(.keelSecondary)
+                            .disabled(cleanup.isBusy)
+                    } else {
+                        Button(action: cleanup.scan) {
+                            Label(cleanup.phase == .scanning ? "Taranıyor…" : "Taramayı başlat", systemImage: "magnifyingglass")
+                        }
+                        .buttonStyle(.keelPrimary)
+                        .disabled(cleanup.isBusy)
 
-                    Button("Temizliğe git", action: openCleanup)
-                        .buttonStyle(.keelSecondary)
+                        Button("Temizliğe git", action: openCleanup)
+                            .buttonStyle(.keelSecondary)
+                    }
                 }
                 .padding(.top, 6)
             }
         }
         .keelCard(padding: 36, radius: 24)
+    }
+
+    @ViewBuilder
+    private var statePill: some View {
+        if cleanup.phase == .scanning {
+            Pill(text: "Taranıyor…", background: Palette.track, foreground: Palette.slate)
+        } else if let lastScan = cleanup.lastScan {
+            Pill(text: "Son tarama: \(lastScan.formatted(date: .omitted, time: .shortened))")
+        } else {
+            Pill(text: "Henüz taranmadı", background: Palette.track, foreground: Palette.slate)
+        }
+    }
+
+    private var headline: String {
+        guard cleanup.lastScan != nil else {
+            return "Bilgisayarını tarayıp neyin yer kapladığını ve neyin güvenle temizlenebileceğini göstereceğiz."
+        }
+        guard cleanup.totalBytes > 0 else {
+            return "Her şey temiz görünüyor. Temizlenecek bir şey bulunamadı."
+        }
+        return "\(ByteFormat.string(cleanup.totalBytes)) temizlenebilir alan bulundu."
     }
 
     private var storageCard: some View {

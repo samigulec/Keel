@@ -32,6 +32,7 @@ struct CleanupExecutorTests {
         let entries = try ActionLog(fileURL: sandbox.home.appendingPathComponent("Library/Logs/Keel/actions.log")).entries()
         #expect(entries.map(\.outcome) == [.removed])
         #expect(entries.first?.path.hasSuffix("Library/Caches/com.spotify.client") == true)
+        #expect(caches.removing(Set(report.removed)).items.isEmpty)
     }
 
     @Test func rechecksPolicyWhenDiskChangedAfterScan() async throws {
