@@ -83,7 +83,13 @@ final class AssistantModel {
     /// this starts a new chat.
     func use(_ kind: AIConnection.Kind) {
         guard connection?.kind != kind else { return }
-        let next = kind == .apple ? AIConnection.apple : AIConnection(kind: kind)
+        // Claude starts on the recommended model; if the account lacks it,
+        // the session falls back to the account's default and says so.
+        let next: AIConnection = switch kind {
+        case .apple: .apple
+        case .claudeCode: AIConnection(kind: kind, model: AIConnection.recommendedClaudeModel)
+        case .chatGPT: AIConnection(kind: kind)
+        }
         next.save()
         connection = next
         startNewChat()

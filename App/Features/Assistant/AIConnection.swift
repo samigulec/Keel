@@ -38,7 +38,8 @@ struct AIConnection: Codable, Equatable {
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
     ]
 
-    static let recommendedModels: Set<String> = ["claude-opus-5-5", "gpt-6.1-sol"]
+    static let recommendedClaudeModel = "claude-opus-5-5"
+    static let recommendedModels: Set<String> = [recommendedClaudeModel, "gpt-6.1-sol"]
 
     var kind: Kind
     var model: String
