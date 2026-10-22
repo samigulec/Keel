@@ -115,9 +115,17 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - `SMAppService` ile privileged helper + XPC
 - Sistem logları, DNS önbelleği, Spotlight yeniden dizinleme, disk doğrulama
 
-### Faz 4 — Keel AI ve dağıtım
-- Claude API ile asistan (yalnızca özet sistem verileri gönderilir, dosya
-  içeriği asla), her öneri tek tıkla uygulanabilir ama onay ister
+### Keel AI (öne alındı, ilk sürüm hazır)
+- Kullanıcı kendi yapay zekasını bağlar: Claude (varsayılan Claude Opus 5.5)
+  ya da OpenAI uyumlu servisler (OpenAI, Gemini, OpenRouter, Ollama, LM Studio)
+- API anahtarı Keychain'de; yalnızca özet sistem verileri gönderilir, dosya
+  içeriği asla
+- Asistan araçlarla gerçek veriye bakar; temizlik yalnızca kart olarak
+  önerilir ve kullanıcı onaylamadan hiçbir şey yapılmaz
+- Sonra: sohbet geçmişini saklama, daha fazla araç (büyük dosyalar,
+  uygulama kaldırma önerileri)
+
+### Faz 4 — Dağıtım
 - Developer ID imzası, notarization, Sparkle ile otomatik güncelleme
 - Public sürüm
 
