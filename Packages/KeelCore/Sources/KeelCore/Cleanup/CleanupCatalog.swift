@@ -21,6 +21,7 @@ public enum CleanupCatalog {
         ("Microsoft Edge", "com.microsoft.edgemac"),
         ("com.microsoft.edgemac", "com.microsoft.edgemac"),
         ("BraveSoftware/Brave-Browser", "com.brave.Browser"),
+        ("com.brave.Browser", "com.brave.Browser"),
         ("Firefox/Profiles", "org.mozilla.firefox"),
         ("com.operasoftware.Opera", "com.operasoftware.Opera"),
         ("company.thebrowser.Browser", "company.thebrowser.Browser"),
@@ -31,7 +32,7 @@ public enum CleanupCatalog {
     static let cacheFoldersHandledElsewhere: Set<String> = [
         "Google", "com.google.Chrome",
         "Microsoft Edge", "com.microsoft.edgemac",
-        "BraveSoftware", "Firefox",
+        "BraveSoftware", "com.brave.Browser", "Firefox",
         "com.operasoftware.Opera", "company.thebrowser.Browser",
         "com.samigulec.Keel",
     ]

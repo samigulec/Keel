@@ -53,6 +53,28 @@ struct CleanupScannerTests {
         #expect(results[.userCaches].skipped.map(\.reason) == [.appRunning(bundleID: "com.spotify.client")])
     }
 
+    @Test func runningAppAlsoOwnsItsUpdaterFolder() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("Library/Caches/com.anthropic.claudefordesktop/data", bytes: 20_000)
+        try sandbox.write("Library/Caches/com.anthropic.claudefordesktop.ShipIt/update.zip", bytes: 20_000)
+        try sandbox.write("Library/Caches/com.anthropic.claudefordesktopper/data", bytes: 20_000)
+
+        let caches = try await sandbox.scanner.scan(
+            context: sandbox.context(running: ["com.anthropic.claudefordesktop"]))[.userCaches]
+        // A different app that only shares the prefix is not skipped.
+        #expect(caches.names == ["com.anthropic.claudefordesktopper"])
+        #expect(caches.skipped.count == 2)
+    }
+
+    @Test func braveCacheBelongsToBrowsers() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("Library/Caches/com.brave.Browser/blob", bytes: 20_000)
+
+        let results = try await sandbox.scanner.scan(context: sandbox.context())
+        #expect(results[.userCaches].items.isEmpty)
+        #expect(results[.browserCaches].names == ["com.brave.Browser"])
+    }
+
     @Test func onlyOldLogsAndNeverKeelsOwn() async throws {
         let sandbox = try Sandbox()
         try sandbox.write("Library/Logs/SomeApp/old.log", bytes: 5_000, daysOld: 10)

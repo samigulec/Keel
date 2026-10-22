@@ -63,8 +63,8 @@ public struct CleanupScanner: Sendable {
                 try Task.checkCancellation()
                 guard seen.insert(candidate.url.standardizedFileURL.path).inserted else { continue }
 
-                if let owner = candidate.owner, context.runningBundleIDs.contains(owner) {
-                    skipped.append(SkippedItem(url: candidate.url, reason: .appRunning(bundleID: owner)))
+                if let owner = candidate.owner, let running = Self.runningApp(owning: owner, in: context.runningBundleIDs) {
+                    skipped.append(SkippedItem(url: candidate.url, reason: .appRunning(bundleID: running)))
                     continue
                 }
                 if case .denied(let reason) = policy.evaluate(candidate.url) {
@@ -90,6 +90,14 @@ public struct CleanupScanner: Sendable {
             skipped: skipped,
             unreadableRoots: unreadable
         )
+    }
+
+    /// The running app that owns an item. Apps keep helper folders named after
+    /// their bundle ID, e.g. `com.vendor.app.ShipIt` for pending updates, so a
+    /// running `com.vendor.app` owns those too.
+    static func runningApp(owning owner: String, in running: Set<String>) -> String? {
+        if running.contains(owner) { return owner }
+        return running.first { owner.hasPrefix($0 + ".") }
     }
 
     static func existsButUnreadable(_ url: URL) -> Bool {
