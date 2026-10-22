@@ -70,7 +70,10 @@ public enum ProcessLines {
             if case .cancelled = termination { box.cancel() }
         }
 
-        // Drain stderr separately so a chatty process cannot block on a full pipe.
+        // Drain stderr separately so a chatty process cannot block on a full
+        // pipe; the group lets the stdout reader wait for all of it.
+        let stderrDrained = DispatchGroup()
+        stderrDrained.enter()
         DispatchQueue.global(qos: .utility).async {
             let handle = box.error.fileHandleForReading
             while true {
@@ -78,6 +81,7 @@ public enum ProcessLines {
                 if data.isEmpty { break }
                 box.appendError(data)
             }
+            stderrDrained.leave()
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -96,6 +100,7 @@ public enum ProcessLines {
                 continuation.yield(String(decoding: buffer, as: UTF8.self))
             }
             box.process.waitUntilExit()
+            stderrDrained.wait()
             let status = box.process.terminationStatus
             if status != 0, !box.wasCancelled {
                 continuation.finish(throwing: ProcessFailure(status: status, standardError: box.errorText))
