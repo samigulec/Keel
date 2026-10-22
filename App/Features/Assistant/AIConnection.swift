@@ -14,17 +14,35 @@ struct AIConnection: Codable, Equatable {
 
     /// Model choices for a Claude account; Claude Code resolves the aliases.
     static let claudeCodeModels: [(alias: String, name: String)] = [
-        ("default", "Hesabının varsayılanı"),
+        ("default", "Varsayılan"),
         ("opus", "Opus"),
         ("sonnet", "Sonnet"),
         ("haiku", "Haiku"),
+        ("fable", "Fable"),
     ]
+
+    /// How hard the model thinks; more effort is slower and costs more.
+    static let effortLevels = ["low", "medium", "high", "xhigh", "max"]
 
     var kind: Kind
     var model: String
     /// OpenAI-compatible only: the preset the user started from and its endpoint.
     var presetID: String?
     var baseURL: String?
+    /// nil keeps the provider's default.
+    var effort: String?
+
+    var supportsEffort: Bool { kind == .claude || kind == .claudeCode }
+
+    /// Models the chat box offers for this connection, as (id, name).
+    var modelChoices: [(id: String, name: String)] {
+        switch kind {
+        case .apple: []
+        case .claudeCode: Self.claudeCodeModels.map { ($0.alias, $0.name) }
+        case .claude: AnthropicBackend.models.map { ($0.id, ModelNames.display($0.id)) }
+        case .openAICompatible: [(model, model)]
+        }
+    }
 
     static let claudeDefault = AIConnection(kind: .claude, model: AnthropicBackend.defaultModel)
     static let apple = AIConnection(kind: .apple, model: "on-device")
@@ -64,7 +82,8 @@ struct AIConnection: Codable, Equatable {
         if kind == .claudeCode {
             return Self.claudeCodeModels.first { $0.alias == model }?.name ?? model
         }
-        return AnthropicBackend.models.first { $0.id == model }?.name ?? model
+        if kind == .claude { return ModelNames.display(model) }
+        return model
     }
 
     /// Runs on this Mac: nothing is sent to a server.
@@ -77,7 +96,9 @@ struct AIConnection: Codable, Equatable {
         case .apple, .claudeCode:
             throw AIError.invalidResponse("\(providerName) HTTP üzerinden çalışmaz")
         case .claude:
-            return AnthropicBackend(apiKey: apiKey ?? "", model: model)
+            var backend = AnthropicBackend(apiKey: apiKey ?? "", model: model)
+            if let effort { backend.effort = effort }
+            return backend
         case .openAICompatible:
             guard let baseURL, let url = URL(string: baseURL) else {
                 throw AIError.invalidResponse("Geçersiz sunucu adresi")

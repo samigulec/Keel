@@ -19,6 +19,20 @@ struct ChatItem: Identifiable {
     var isFailed = false
 }
 
+/// Running totals for the line under the chat box.
+struct ChatStats: Equatable {
+    var model: String?
+    var costUSD: Double?
+    var turns = 0
+    var contextTokens: Int?
+    var contextWindow: Int?
+
+    var contextFraction: Double? {
+        guard let contextTokens, let contextWindow, contextWindow > 0 else { return nil }
+        return min(Double(contextTokens) / Double(contextWindow), 1)
+    }
+}
+
 /// The Keel AI conversation: connection, messages and the engine behind them.
 @MainActor
 @Observable
@@ -28,6 +42,7 @@ final class AssistantModel {
     private(set) var isRunning = false
     /// Proposals the user applied, with what was freed.
     private(set) var appliedProposals: [UUID: Int64] = [:]
+    private(set) var stats = ChatStats()
     var draft = ""
 
     static let suggestions = [
@@ -85,7 +100,46 @@ final class AssistantModel {
         session = nil
         items = []
         appliedProposals = [:]
+        stats = ChatStats()
         isRunning = false
+    }
+
+    /// Picks another model or effort for the same provider. The conversation
+    /// carries on; the next message uses the new setting.
+    func update(model: String? = nil, effort: String?? = nil) {
+        guard var connection else { return }
+        if let model { connection.model = model }
+        if let effort { connection.effort = effort }
+        connection.save()
+        self.connection = connection
+        stats.model = nil
+
+        if let engine = session as? AssistantEngine {
+            let key = connection.needsKey ? KeychainStore.read(account: connection.keychainAccount) : nil
+            if let backend = try? connection.backend(apiKey: key) {
+                engine.replaceBackend(backend)
+            }
+        } else if let claude = session as? ClaudeCodeSession {
+            claude.modelAlias = connection.model == "default" ? nil : connection.model
+            claude.effort = connection.effort
+        }
+    }
+
+    /// Switches provider. A conversation cannot move between providers, so
+    /// this starts a new chat.
+    func switchTo(_ connection: AIConnection) {
+        try? connect(connection, apiKey: nil)
+    }
+
+    /// Providers the chat box can switch to without setting anything up.
+    var quickConnections: [AIConnection] {
+        var result: [AIConnection] = [AIConnection(kind: .claudeCode, model: "default")]
+        if AppleIntelligence.isAvailable { result.append(.apple) }
+        if KeychainStore.read(account: AIConnection.claudeDefault.keychainAccount) != nil {
+            result.append(.claudeDefault)
+        }
+        if let connection, connection.kind == .openAICompatible { result.append(connection) }
+        return result
     }
 
     // MARK: Conversation
@@ -105,6 +159,7 @@ final class AssistantModel {
                     guard let self, self.chatID == chat else { return }
                     self.handle(event)
                 }
+                if chatID == chat { stats.turns += 1 }
             } catch {
                 // A new chat was started meanwhile; this answer belongs to the old one.
                 guard chatID == chat else { return }
@@ -140,6 +195,7 @@ final class AssistantModel {
             let proposeTool = tools.first { $0.definition.name == "propose_cleanup" }
             session = ClaudeCodeSession(
                 modelAlias: connection.model == "default" ? nil : connection.model,
+                effort: connection.effort,
                 gatherContext: { [status, cleanup, performance] report in
                     await KeelContext.gather(status: status, cleanup: cleanup, performance: performance, report: report)
                 },
@@ -190,6 +246,15 @@ final class AssistantModel {
                 items[index].isFinished = true
                 items[index].isFailed = isError
             }
+
+        case .usage(let usage):
+            if let model = usage.model { stats.model = model }
+            if let cost = usage.costUSD {
+                // Claude Code reports the session's running total; the API reports each response.
+                stats.costUSD = connection?.kind == .claudeCode ? cost : (stats.costUSD ?? 0) + cost
+            }
+            if let context = usage.contextTokens { stats.contextTokens = context }
+            if let window = usage.contextWindow { stats.contextWindow = window }
 
         case .stopped(let reason):
             switch reason {

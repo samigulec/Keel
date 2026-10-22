@@ -15,7 +15,7 @@ struct ClaudeCodeTests {
             #"{"type":"result","subtype":"success","is_error":false,"result":"Merhaba","session_id":"s-1"}"#,
         ]
         let events = lines.flatMap { parser.consume($0) }
-        #expect(events == [.text("Mer"), .text("haba"), .result(sessionID: "s-1", isError: false, message: "Merhaba")])
+        #expect(events == [.started(model: "claude-opus-5-5"), .text("Mer"), .text("haba"), .result(sessionID: "s-1", isError: false, message: "Merhaba")])
     }
 
     @Test func showsFinalTextWhenNothingStreamed() {
@@ -30,6 +30,20 @@ struct ClaudeCodeTests {
         #expect(parser.consume(#"{"type":"result","subtype":"error_during_execution","is_error":true,"session_id":"s"}"#)
             == [.result(sessionID: "s", isError: true, message: "error_during_execution")])
         #expect(parser.consume("not json").isEmpty)
+    }
+
+    @Test func readsCostAndContextFromResult() {
+        var parser = ClaudeCodeStreamParser()
+        let line = #"{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"s","total_cost_usd":0.42,"usage":{"input_tokens":2000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":3000,"output_tokens":500},"modelUsage":{"claude-haiku-5-5":{"inputTokens":10,"contextWindow":1000000},"claude-opus-5-5":{"inputTokens":45000,"contextWindow":1000000}}}"#
+        let events = parser.consume(line)
+        #expect(events.last == .usage(TurnUsage(model: "claude-opus-5-5", costUSD: 0.42, contextTokens: 45_500, contextWindow: 1_000_000)))
+    }
+
+    @Test func modelNamesReadWell() {
+        #expect(ModelNames.display("claude-opus-5-5") == "Opus 5.5")
+        #expect(ModelNames.display("claude-haiku-4-5-20251001") == "Haiku 4.5")
+        #expect(ModelNames.display("claude-fable-5-1") == "Fable 5.1")
+        #expect(ModelNames.display("llama3.2") == "llama3.2")
     }
 
     @Test func hidesProposalBlockSplitAcrossChunks() {

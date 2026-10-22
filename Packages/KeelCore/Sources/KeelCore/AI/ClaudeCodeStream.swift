@@ -3,10 +3,13 @@ import Foundation
 /// Reads `claude -p --output-format stream-json --verbose --include-partial-messages`.
 public struct ClaudeCodeStreamParser: Sendable {
     public enum Event: Equatable, Sendable {
+        /// The session started; the model is the full id Claude Code resolved.
+        case started(model: String)
         case text(String)
         /// Claude Code is retrying a failed API call, e.g. after `overloaded`.
         case retry(attempt: Int, error: String)
         case result(sessionID: String?, isError: Bool, message: String)
+        case usage(TurnUsage)
     }
 
     private var sawText = false
@@ -24,6 +27,9 @@ public struct ClaudeCodeStreamParser: Sendable {
             sawText = true
             return [.text(text)]
 
+        case "system" where json["subtype"]?.stringValue == "init":
+            return json["model"]?.stringValue.map { [.started(model: $0)] } ?? []
+
         case "system" where json["subtype"]?.stringValue == "api_retry":
             return [.retry(
                 attempt: json["attempt"]?.numberValue.map(Int.init) ?? 0,
@@ -39,11 +45,32 @@ public struct ClaudeCodeStreamParser: Sendable {
                 events.append(.text(message))
             }
             events.append(.result(sessionID: json["session_id"]?.stringValue, isError: isError, message: message))
+            if let usage = Self.usage(from: json) { events.append(.usage(usage)) }
             return events
 
         default:
             return []
         }
+    }
+
+    /// Cost is Claude Code's own estimate; context is what this answer's
+    /// request held, out of the model's window.
+    static func usage(from result: JSONValue) -> TurnUsage? {
+        let usage = result["usage"]
+        func count(_ key: String) -> Int { usage?[key]?.numberValue.map(Int.init) ?? 0 }
+        let context = count("input_tokens") + count("cache_read_input_tokens")
+            + count("cache_creation_input_tokens") + count("output_tokens")
+        // The main model is the one with the most input; helpers may also appear.
+        let models = result["modelUsage"]?.objectValue ?? [:]
+        let main = models.max { ($0.value["inputTokens"]?.numberValue ?? 0) < ($1.value["inputTokens"]?.numberValue ?? 0) }
+        let cost = result["total_cost_usd"]?.numberValue
+        guard cost != nil || context > 0 else { return nil }
+        return TurnUsage(
+            model: main?.key,
+            costUSD: cost,
+            contextTokens: context > 0 ? context : nil,
+            contextWindow: main?.value["contextWindow"]?.numberValue.map(Int.init)
+        )
     }
 }
 

@@ -39,7 +39,7 @@ enum ClaudeStream {
     }
 
     static func text(_ chunks: [String], stop: String = "end_turn") -> [String] {
-        var lines = event(#"{"type":"message_start","message":{"id":"msg_1","role":"assistant","content":[]}}"#)
+        var lines = event(#"{"type":"message_start","message":{"id":"msg_1","model":"claude-opus-5-5","role":"assistant","content":[],"usage":{"input_tokens":1000,"cache_read_input_tokens":9000,"cache_creation_input_tokens":0}}}"#)
         lines += event(#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}"#)
         lines += event(#"{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-abc"}}"#)
         lines += event(#"{"type":"content_block_stop","index":0}"#)
@@ -141,12 +141,25 @@ struct AssistantTests {
         var events: [AssistantEvent] = []
         try await engine.send("Selam") { events.append($0) }
 
-        #expect(events == [.textDelta("Mer"), .textDelta("haba!"), .stopped(.endTurn)])
+        #expect(events.filter { if case .usage = $0 { false } else { true } }
+            == [.textDelta("Mer"), .textDelta("haba!"), .stopped(.endTurn)])
         #expect(engine.history.count == 2)
         let content = try #require(engine.history[1]["content"]?.arrayValue)
         #expect(content[0]["type"] == "thinking")
         #expect(content[0]["signature"] == "sig-abc")
         #expect(content[1]["text"] == "Merhaba!")
+    }
+
+    @Test func reportsUsageWithEstimatedCost() async throws {
+        let engine = engine(ScriptedTransport([ClaudeStream.text(["ok"])]))
+        var usage: TurnUsage?
+        try await engine.send("?") { if case .usage(let value) = $0 { usage = value } }
+        let reported = try #require(usage)
+        #expect(reported.model == "claude-opus-5-5")
+        #expect(reported.contextTokens == 10_005)
+        #expect(reported.contextWindow == 1_000_000)
+        // 1000 in x $4 + 9000 cached x $0.20 + 5 out x $20, per million
+        #expect(abs((reported.costUSD ?? 0) - 0.0059) < 0.000_001)
     }
 
     @Test func runsToolsAndSendsResultsBack() async throws {

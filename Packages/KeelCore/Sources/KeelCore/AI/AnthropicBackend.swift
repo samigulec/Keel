@@ -109,6 +109,11 @@ struct AnthropicStreamAccumulator: TurnAccumulator {
     private var invalidInputs: [Int: String] = [:]
     private var stopReason: String?
     private var refusalCategory: String?
+    private var model: String?
+    private var inputTokens = 0
+    private var outputTokens = 0
+    private var cacheReadTokens = 0
+    private var cacheWriteTokens = 0
 
     mutating func consume(_ event: SSEEvent) throws -> String? {
         guard let payload = try? JSONValue.parse(event.data), let type = payload["type"]?.stringValue else { return nil }
@@ -156,7 +161,19 @@ struct AnthropicStreamAccumulator: TurnAccumulator {
             }
             return nil
 
+        case "message_start":
+            let message = payload["message"]
+            model = message?["model"]?.stringValue
+            let usage = message?["usage"]
+            inputTokens = usage?["input_tokens"]?.numberValue.map(Int.init) ?? 0
+            cacheReadTokens = usage?["cache_read_input_tokens"]?.numberValue.map(Int.init) ?? 0
+            cacheWriteTokens = usage?["cache_creation_input_tokens"]?.numberValue.map(Int.init) ?? 0
+            return nil
+
         case "message_delta":
+            if let output = payload["usage"]?["output_tokens"]?.numberValue {
+                outputTokens = Int(output)
+            }
             if let reason = payload["delta"]?["stop_reason"]?.stringValue {
                 stopReason = reason
             }
@@ -169,7 +186,7 @@ struct AnthropicStreamAccumulator: TurnAccumulator {
                 message: payload["error"]?["message"]?.stringValue ?? event.data
             )
 
-        default: // message_start, message_stop, ping
+        default: // message_stop, ping
             return nil
         }
     }
@@ -199,11 +216,21 @@ struct AnthropicStreamAccumulator: TurnAccumulator {
         case let other?: .other(other)
         }
 
+        let context = inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens
+        let usage = TurnUsage(
+            model: model,
+            costUSD: model.flatMap {
+                ModelPricing.cost(model: $0, input: inputTokens, output: outputTokens, cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens)
+            },
+            contextTokens: context > 0 ? context : nil,
+            contextWindow: ModelPricing.contextWindow
+        )
         return BackendTurn(
             assistantMessage: ["role": "assistant", "content": .array(ordered.map(JSONValue.object))],
             text: text,
             toolCalls: toolCalls,
-            stopReason: reason
+            stopReason: reason,
+            usage: usage
         )
     }
 }

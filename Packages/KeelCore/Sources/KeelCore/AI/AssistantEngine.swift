@@ -17,6 +17,8 @@ public enum AssistantEvent: Equatable, Sendable {
     case textDelta(String)
     case toolStarted(id: String, name: String)
     case toolFinished(id: String, name: String, isError: Bool)
+    /// Tokens and cost of one model response.
+    case usage(TurnUsage)
     /// Why the turn ended, when it is worth telling the user.
     case stopped(StopReason)
 }
@@ -30,7 +32,7 @@ public enum AssistantEvent: Equatable, Sendable {
 public final class AssistantEngine {
     public private(set) var history: [JSONValue] = []
 
-    private let backend: any ChatBackend
+    private var backend: any ChatBackend
     private let transport: any StreamingTransport
     private let systemPrompt: String
     private let tools: [String: AITool]
@@ -54,6 +56,12 @@ public final class AssistantEngine {
         self.maxSteps = maxSteps
     }
 
+    /// Switches model or settings mid-conversation; the history is kept.
+    /// Thinking from another model is dropped by the provider, unbilled.
+    public func replaceBackend(_ backend: any ChatBackend) {
+        self.backend = backend
+    }
+
     /// Sends one user message. On failure the whole exchange is rolled back,
     /// so the history never ends with an unanswered message or tool call.
     public func send(_ text: String, onEvent: (AssistantEvent) -> Void) async throws {
@@ -72,6 +80,7 @@ public final class AssistantEngine {
             try Task.checkCancellation()
             let turn = try await streamTurn(onEvent: onEvent)
             history.append(turn.assistantMessage)
+            if let usage = turn.usage { onEvent(.usage(usage)) }
 
             switch turn.stopReason {
             case .refusal, .maxTokens, .other:

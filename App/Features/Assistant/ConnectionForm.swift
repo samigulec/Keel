@@ -25,34 +25,48 @@ struct ConnectionForm: View {
     @State private var message: (text: String, isError: Bool)?
     @State private var showsKeyOptions = false
 
-    private var apple: AppleIntelligence.Status { AppleIntelligence.status }
-
     private var preset: OpenAICompatibleBackend.Preset? {
         OpenAICompatibleBackend.presets.first { $0.id == presetID }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Hesabınla bağlan").eyebrowStyle()
-                HStack(alignment: .top, spacing: 14) {
-                    ClaudeAccountCard(onDone: onDone)
-                    ComingSoonAccountCard(
-                        title: "ChatGPT",
-                        detail: "ChatGPT hesabıyla bağlanma (Codex CLI üzerinden) bir sonraki adımda geliyor."
-                    )
+        VStack(alignment: .leading, spacing: 10) {
+            Text("AI modelleri").eyebrowStyle()
+            VStack(spacing: 0) {
+                ClaudeAccountRow(onDone: onDone)
+                Divider().overlay(Palette.divider)
+                ProviderRow(
+                    icon: "bubble.left.and.bubble.right",
+                    title: "ChatGPT",
+                    subtitle: "ChatGPT hesabınla, Codex CLI üzerinden",
+                    badge: ("yakında", false)
+                ) {
+                    EmptyView()
+                }
+                .opacity(0.6)
+                Divider().overlay(Palette.divider)
+                AppleIntelligenceRow(onDone: onDone)
+                Divider().overlay(Palette.divider)
+                ProviderRow(
+                    icon: "key",
+                    title: "API anahtarı",
+                    subtitle: "Claude API, OpenAI, Gemini, OpenRouter ya da yerel Ollama / LM Studio",
+                    badge: currentUsesKey ? ("kullanılıyor", true) : nil
+                ) {
+                    Button(showsKeyOptions ? "Gizle" : "Ayarla") {
+                        withAnimation(.easeInOut(duration: 0.15)) { showsKeyOptions.toggle() }
+                    }
+                    .buttonStyle(RowButtonStyle())
+                } detail: {
+                    if showsKeyOptions {
+                        keyOptions
+                            .padding(.top, 6)
+                            .padding(.leading, 52)
+                    }
                 }
             }
-
-            appleOption
-
-            DisclosureGroup(isExpanded: $showsKeyOptions) {
-                keyOptions.padding(.top, 14)
-            } label: {
-                Text("API anahtarıyla bağlan (gelişmiş)")
-                    .font(.keel(15, .bold))
-                    .foregroundStyle(Palette.hull)
-            }
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border) }
         }
         .onAppear {
             loadCurrent()
@@ -62,6 +76,10 @@ struct ConnectionForm: View {
             // Back from the browser with a freshly copied key.
             checkClipboard()
         }
+    }
+
+    private var currentUsesKey: Bool {
+        model.connection?.kind == .claude || model.connection?.kind == .openAICompatible
     }
 
     // MARK: API keys
@@ -98,61 +116,8 @@ struct ConnectionForm: View {
                 .buttonStyle(.keelPrimary)
                 .disabled(!canConnect || isTesting)
 
-                if let onDone {
-                    Button("Vazgeç", action: onDone)
-                        .buttonStyle(.keelSecondary)
-                }
             }
         }
-    }
-
-    // MARK: Apple Intelligence
-
-    private var appleOption: some View {
-        HStack(alignment: .center, spacing: 14) {
-            Image(systemName: "apple.intelligence")
-                .font(.system(size: 26, weight: .semibold))
-                .foregroundStyle(Palette.mintText)
-                .frame(width: 44, height: 44)
-                .background(Palette.mint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text("Apple Intelligence")
-                        .font(.keel(16, .extraBold))
-                        .foregroundStyle(Palette.hull)
-                    Pill(text: "Ücretsiz · Cihazda")
-                }
-                switch apple {
-                case .available:
-                    Text("Kurulum ve hesap gerekmez; veriler Mac'inden çıkmaz. Daha kısa ve basit yanıtlar verir.")
-                        .font(.keel(13, .medium))
-                        .foregroundStyle(Palette.slate)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .unavailable(let reason):
-                    Text(reason)
-                        .font(.keel(13, .medium))
-                        .foregroundStyle(Palette.warningText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 12)
-            if model.connection?.kind == .apple {
-                Label("Kullanılıyor", systemImage: "checkmark.circle.fill")
-                    .font(.keel(13, .bold))
-                    .foregroundStyle(Palette.mintText)
-            } else {
-                Button("Kullan") {
-                    try? model.connect(.apple, apiKey: nil)
-                    onDone?()
-                }
-                .buttonStyle(.keelSecondary)
-                .disabled(apple != .available)
-            }
-        }
-        .padding(18)
-        .background(Palette.mist, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border) }
     }
 
     // MARK: Claude

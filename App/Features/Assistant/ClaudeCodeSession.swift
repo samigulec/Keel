@@ -12,17 +12,20 @@ final class ClaudeCodeSession: ChatSession {
         var errorDescription: String? { message }
     }
 
-    private let modelAlias: String?
+    var modelAlias: String?
+    var effort: String?
     private let gatherContext: @MainActor ((AssistantEvent) -> Void) async -> JSONValue
     private let propose: @MainActor (JSONValue) async -> Void
     private var sessionID: String?
 
     init(
         modelAlias: String?,
+        effort: String?,
         gatherContext: @escaping @MainActor ((AssistantEvent) -> Void) async -> JSONValue,
         propose: @escaping @MainActor (JSONValue) async -> Void
     ) {
         self.modelAlias = modelAlias
+        self.effort = effort
         self.gatherContext = gatherContext
         self.propose = propose
     }
@@ -53,6 +56,7 @@ final class ClaudeCodeSession: ChatSession {
             "--system-prompt", Self.systemPrompt,
         ]
         if let modelAlias { arguments += ["--model", modelAlias] }
+        if let effort { arguments += ["--effort", effort] }
         if let sessionID {
             arguments += ["--resume", sessionID]
         } else if let newID {
@@ -75,6 +79,10 @@ final class ClaudeCodeSession: ChatSession {
                     case .text(let chunk):
                         let visible = filter.feed(chunk)
                         if !visible.isEmpty { onEvent(.textDelta(visible)) }
+                    case .started(let model):
+                        onEvent(.usage(TurnUsage(model: model)))
+                    case .usage(let usage):
+                        onEvent(.usage(usage))
                     case .retry:
                         break
                     case .result(let id, let isError, let message):

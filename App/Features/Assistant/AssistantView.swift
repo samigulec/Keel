@@ -16,7 +16,7 @@ struct AssistantView: View {
                     }
                 } else {
                     conversation
-                    InputBar()
+                    Composer { editingConnection = true }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -27,13 +27,21 @@ struct AssistantView: View {
         }
         .sheet(isPresented: $editingConnection) {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Yapay zeka bağlantısı")
-                    .font(.keel(20, .extraBold))
-                    .foregroundStyle(Palette.hull)
-                ConnectionForm { editingConnection = false }
+                HStack {
+                    Text("Yapay zeka bağlantısı")
+                        .font(.keel(20, .extraBold))
+                        .foregroundStyle(Palette.hull)
+                    Spacer()
+                    Button("Bitti") { editingConnection = false }
+                        .buttonStyle(RowButtonStyle())
+                        .keyboardShortcut(.defaultAction)
+                }
+                ScrollView {
+                    ConnectionForm { editingConnection = false }
+                }
             }
             .padding(28)
-            .frame(width: 460)
+            .frame(width: 640, height: 600)
             .background(Palette.mist)
             .environment(model)
             .preferredColorScheme(.light)
@@ -54,25 +62,10 @@ struct AssistantView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
-            PageHeader(
-                title: "Keel AI",
-                subtitle: "Bilgisayarın hakkında soru sor; Keel analiz eder, çözüm önerir. Hiçbir şey onayın olmadan yapılmaz."
-            )
-            Spacer(minLength: 16)
-            if let connection = model.connection {
-                HStack(spacing: 8) {
-                    Circle().fill(Palette.keelGreen).frame(width: 8, height: 8)
-                    Text("\(connection.providerName) · \(connection.modelName)")
-                        .font(.keel(13, .bold))
-                        .foregroundStyle(Palette.mintText)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Palette.mint, in: Capsule())
-            }
-        }
+        PageHeader(
+            title: "Keel AI",
+            subtitle: "Bilgisayarın hakkında soru sor; Keel analiz eder, çözüm önerir. Hiçbir şey onayın olmadan yapılmaz."
+        )
     }
 
     // MARK: Conversation
@@ -142,40 +135,48 @@ struct AssistantView: View {
 
     private var aside: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let connection = model.connection {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Bağlantı").eyebrowStyle(color: Palette.Sidebar.eyebrow)
-                    Text(connection.providerName)
-                        .font(.keel(20, .extraBold))
-                        .foregroundStyle(.white)
-                    Text(connection.modelName)
-                        .font(.keelMono(13, .medium))
-                        .foregroundStyle(Palette.Sidebar.text)
-                    HStack(spacing: 16) {
-                        Button(connection.kind == .apple ? "Daha güçlü model bağla" : "Değiştir") { editingConnection = true }
-                        if connection.kind != .apple {
-                            Button("Bağlantıyı kaldır", action: model.disconnect)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("AI modelleri")
+                    .eyebrowStyle()
+                    .padding(.bottom, 6)
+                ForEach(model.quickConnections, id: \.keychainAccount) { option in
+                    let isCurrent = model.connection?.kind == option.kind
+                        && (option.kind != .openAICompatible || model.connection?.baseURL == option.baseURL)
+                    Button {
+                        if !isCurrent { model.switchTo(option) }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: isCurrent ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(isCurrent ? Palette.mintText : Palette.slate)
+                            Text(option.providerName)
+                                .font(.keel(14, isCurrent ? .bold : .semibold))
+                                .foregroundStyle(Palette.hull)
+                            Spacer()
                         }
+                        .frame(minHeight: 34)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .font(.keel(13, .bold))
-                    .foregroundStyle(Palette.keelGreen)
-                    .frame(minHeight: 44)
                 }
-                .keelCard(padding: 22, radius: 20, fill: Palette.hull)
+                Button("Yönet…") { editingConnection = true }
+                    .buttonStyle(.plain)
+                    .font(.keel(13, .bold))
+                    .foregroundStyle(Palette.mintText)
+                    .frame(minHeight: 34)
             }
+            .keelCard(padding: 20, radius: 18)
 
             if model.connection?.isLocal == true {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Tamamen bu Mac'te", systemImage: "lock.fill")
-                        .font(.keel(16, .extraBold))
+                        .font(.keel(15, .extraBold))
                         .foregroundStyle(Palette.hull)
                     Text("Model bilgisayarında çalışıyor; sorduğun hiçbir şey ve hiçbir sistem verisi Mac'inden çıkmıyor.")
                         .font(.keel(13, .medium))
                         .foregroundStyle(Palette.slate)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .keelCard(padding: 22, radius: 20)
+                .keelCard(padding: 20, radius: 18)
             } else {
                 sharingCard
             }
@@ -390,48 +391,234 @@ private struct ProposalCard: View {
     }
 }
 
-private struct InputBar: View {
+/// The message box with the model controls above it: provider, model and
+/// effort menus, and a line with cost, turns and how full the context is.
+private struct Composer: View {
     @Environment(AssistantModel.self) private var model
+    let manageModels: () -> Void
 
     var body: some View {
         @Bindable var model = model
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField("Keel'e bir şey sor… örn. \"Hangi uygulama pili tüketiyor?\"", text: $model.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.keel(15, .medium))
-                .lineLimit(1...5)
-                .padding(.vertical, 12)
-                .onSubmit { model.send() }
-                .accessibilityLabel("Keel AI'a sor")
+        VStack(alignment: .leading, spacing: 0) {
+            if let connection = model.connection {
+                HStack(spacing: 20) {
+                    providerMenu(connection)
+                    modelMenu(connection)
+                    if connection.supportsEffort {
+                        effortMenu(connection)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
-            if model.isRunning {
-                Button(action: model.stop) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Palette.hull, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Durdur")
-            } else {
-                Button { model.send() } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Palette.hull)
-                        .frame(width: 44, height: 44)
-                        .background(Palette.keelGreen, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityLabel("Gönder")
+                StatsLine(stats: model.stats, connection: connection)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 10)
             }
+
+            Divider().overlay(Palette.divider)
+
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("Mesaj yaz… örn. \"Hangi uygulama pili tüketiyor?\"", text: $model.draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.keel(15, .medium))
+                    .lineLimit(1...5)
+                    .padding(.vertical, 12)
+                    .onSubmit { model.send() }
+                    .accessibilityLabel("Keel AI'a sor")
+
+                if model.isRunning {
+                    Button(action: model.stop) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Palette.hull, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Durdur")
+                } else {
+                    Button { model.send() } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Palette.hull)
+                            .frame(width: 40, height: 40)
+                            .background(Palette.keelGreen, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Gönder")
+                }
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 8)
+            .padding(.vertical, 6)
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 8)
-        .padding(.vertical, 6)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.controlBorder) }
+    }
+
+    // MARK: Menus
+
+    private func providerMenu(_ connection: AIConnection) -> some View {
+        Menu {
+            ForEach(model.quickConnections, id: \.keychainAccount) { option in
+                Button {
+                    model.switchTo(option)
+                } label: {
+                    if option.kind == connection.kind {
+                        Label(option.providerName, systemImage: "checkmark")
+                    } else {
+                        Text(option.providerName)
+                    }
+                }
+            }
+            Divider()
+            Button("AI modellerini yönet…", action: manageModels)
+        } label: {
+            MenuLabel(text: connection.providerName)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sağlayıcıyı değiştirmek yeni bir sohbet başlatır")
+    }
+
+    @ViewBuilder
+    private func modelMenu(_ connection: AIConnection) -> some View {
+        let choices = connection.modelChoices
+        if choices.count <= 1 {
+            MenuLabel(text: modelTitle(connection), showsChevron: false)
+        } else {
+            Menu {
+                ForEach(choices, id: \.id) { choice in
+                    Button {
+                        model.update(model: choice.id)
+                    } label: {
+                        if choice.id == connection.model {
+                            Label(choice.name, systemImage: "checkmark")
+                        } else {
+                            Text(choice.name)
+                        }
+                    }
+                }
+            } label: {
+                MenuLabel(text: modelTitle(connection))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+    }
+
+    private func effortMenu(_ connection: AIConnection) -> some View {
+        Menu {
+            Button {
+                model.update(effort: .some(nil))
+            } label: {
+                if connection.effort == nil {
+                    Label("Varsayılan", systemImage: "checkmark")
+                } else {
+                    Text("Varsayılan")
+                }
+            }
+            ForEach(AIConnection.effortLevels, id: \.self) { level in
+                Button {
+                    model.update(effort: .some(level))
+                } label: {
+                    if level == connection.effort {
+                        Label(level, systemImage: "checkmark")
+                    } else {
+                        Text(level)
+                    }
+                }
+            }
+        } label: {
+            MenuLabel(text: connection.effort ?? "effort")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Düşünme seviyesi: yükseldikçe yanıtlar daha özenli ama daha yavaş ve pahalı olur")
+    }
+
+    /// The model name to show: the one that actually answered when known.
+    private func modelTitle(_ connection: AIConnection) -> String {
+        switch connection.kind {
+        case .apple:
+            return "Cihaz modeli"
+        case .claudeCode:
+            if let answered = model.stats.model { return ModelNames.display(answered) }
+            return connection.modelName
+        case .claude:
+            return ModelNames.display(connection.model)
+        case .openAICompatible:
+            return connection.model
+        }
+    }
+}
+
+private struct MenuLabel: View {
+    let text: String
+    var showsChevron = true
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(.keel(14, .semibold))
+                .foregroundStyle(Palette.hull)
+                .lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Palette.slate)
+            }
+        }
+        .frame(minHeight: 28)
+        .contentShape(Rectangle())
+    }
+}
+
+/// "≈$0,12 · 3 tur · bağlam ▮▮▯▯ %4"
+private struct StatsLine: View {
+    let stats: ChatStats
+    let connection: AIConnection
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(costText)
+                .help(costHelp)
+            Text("·")
+            Text("\(stats.turns) tur")
+            if let fraction = stats.contextFraction {
+                Text("·")
+                Text("bağlam")
+                ProgressBar(fraction: max(fraction, 0.01), tint: Palette.slate, height: 4)
+                    .frame(width: 90)
+                Text("%\(Int((fraction * 100).rounded()))")
+            }
+        }
+        .font(.keelMono(12, .medium))
+        .foregroundStyle(Palette.slate)
+        .lineLimit(1)
+    }
+
+    private var costText: String {
+        if connection.isLocal { return "ücretsiz · cihazda" }
+        guard let cost = stats.costUSD else { return "maliyet —" }
+        if cost > 0, cost < 0.01 { return "maliyet <$0,01" }
+        let formatted = String(format: "%.2f", cost).replacingOccurrences(of: ".", with: ",")
+        return "maliyet ≈$\(formatted)"
+    }
+
+    private var costHelp: String {
+        switch connection.kind {
+        case .claudeCode: "Claude Code'un API fiyatlarıyla tahmini. Aboneliğinden ayrıca ücret alınmaz; kullanım limitlerine sayılır."
+        case .claude: "Liste fiyatlarıyla tahmini; asıl fatura Anthropic'ten gelir."
+        default: "Bu sağlayıcı maliyet bilgisi vermiyor."
+        }
     }
 }
 

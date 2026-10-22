@@ -49,6 +49,7 @@ public struct BackendTurn: Sendable {
     public let text: String
     public let toolCalls: [ToolCall]
     public let stopReason: StopReason
+    public var usage: TurnUsage?
 }
 
 public struct ToolDefinition: Equatable, Sendable {
