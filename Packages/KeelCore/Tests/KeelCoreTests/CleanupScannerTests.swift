@@ -7,15 +7,38 @@ struct CleanupScannerTests {
     @Test func findsAppCachesButLeavesAppleBrowsersAndKeelAlone() async throws {
         let sandbox = try Sandbox()
         try sandbox.write("Library/Caches/com.spotify.client/data", bytes: 30_000)
-        try sandbox.write("Library/Caches/Homebrew/bottle.tar.gz", bytes: 20_000)
+        try sandbox.write("Library/Caches/com.todesktop.230313mzl4w4u92/blob", bytes: 20_000)
         try sandbox.write("Library/Caches/com.apple.Safari/cache.db", bytes: 20_000)
         try sandbox.write("Library/Caches/Google/Chrome/Default/blob", bytes: 20_000)
         try sandbox.write("Library/Caches/com.samigulec.Keel/state", bytes: 20_000)
 
         let results = try await sandbox.scanner.scan(context: sandbox.context())
-        #expect(results[.userCaches].names == ["com.spotify.client", "Homebrew"])
+        #expect(results[.userCaches].names == ["com.spotify.client", "com.todesktop.230313mzl4w4u92"])
         #expect(results[.browserCaches].names == ["Chrome"])
         #expect(results[.userCaches].items.allSatisfy { $0.removal == .moveToTrash })
+    }
+
+    @Test func leavesAppleServicesAndToolInstallsAlone() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("Library/Caches/GeoServices/tiles.db", bytes: 20_000)
+        try sandbox.write("Library/Caches/PassKit/pass.db", bytes: 20_000)
+        try sandbox.write("Library/Caches/ms-playwright-go/chromium/chrome", bytes: 20_000)
+        try sandbox.write("Library/Caches/ms-playwright/firefox/firefox", bytes: 20_000)
+
+        let results = try await sandbox.scanner.scan(context: sandbox.context())
+        #expect(results.allSatisfy { $0.items.isEmpty })
+    }
+
+    @Test func developerToolCachesAreOptIn() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("Library/Caches/Homebrew/bottle.tar.gz", bytes: 20_000)
+        try sandbox.write("Library/Caches/pip/http/x", bytes: 20_000)
+        try sandbox.write("Library/Caches/com.spotify.client/data", bytes: 20_000)
+
+        let results = try await sandbox.scanner.scan(context: sandbox.context())
+        #expect(results[.userCaches].names == ["com.spotify.client"])
+        #expect(results[.developer].names == ["Homebrew", "pip"])
+        #expect(results[.developer].category.selectedByDefault == false)
     }
 
     @Test func skipsCachesOfRunningApps() async throws {

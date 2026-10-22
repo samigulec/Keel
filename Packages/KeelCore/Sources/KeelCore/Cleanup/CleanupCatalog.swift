@@ -36,6 +36,27 @@ public enum CleanupCatalog {
         "com.samigulec.Keel",
     ]
 
+    /// Caches of macOS services whose folders lack the `com.apple.` prefix.
+    /// Like other Apple caches, they are left to macOS.
+    static let appleServiceCaches: Set<String> = [
+        "GeoServices", "PassKit", "Animoji", "askpermissiond",
+        "CloudKit", "FamilyCircle", "familycircled",
+    ]
+
+    /// Not caches despite living in ~/Library/Caches: browser installs used by
+    /// test tools. Removing them breaks the tool until it is reinstalled.
+    static let toolInstallations: Set<String> = [
+        "ms-playwright", "ms-playwright-go", "Cypress",
+    ]
+
+    /// Package manager and build tool caches. Safe to remove, but the next
+    /// install or build downloads everything again, so they are opt-in.
+    static let developerToolCaches: [String] = [
+        "Homebrew", "pip", "pypoetry", "composer", "node-gyp", "typescript",
+        "bun", "Yarn", "yarn", "pnpm", "go-build", "org.swift.swiftpm",
+        "CocoaPods", "deno",
+    ]
+
     public static func standard(home: URL) -> [CleanupRule] {
         let library = home.appendingPathComponent("Library", isDirectory: true)
         let caches = library.appendingPathComponent("Caches", isDirectory: true)
@@ -54,7 +75,10 @@ public enum CleanupCatalog {
                     ChildrenSource(
                         root: caches,
                         ownership: .bundleIDFromName,
-                        excludedNames: cacheFoldersHandledElsewhere,
+                        excludedNames: cacheFoldersHandledElsewhere
+                            .union(appleServiceCaches)
+                            .union(toolInstallations)
+                            .union(developerToolCaches),
                         // Apple's own caches are left to macOS in Phase 1.
                         excludedPrefixes: ["com.apple."]
                     ),
@@ -90,11 +114,14 @@ public enum CleanupCatalog {
                 category: CleanupCategory(
                     id: .developer,
                     title: "Geliştirici önbellekleri",
-                    summary: "Xcode DerivedData ve Simulator önbellekleri",
+                    summary: "Xcode, Homebrew, npm, pip ve benzerleri; sonraki derlemede yeniden indirilir",
                     removal: .moveToTrash,
-                    selectedByDefault: true
+                    selectedByDefault: false
                 ),
                 sources: [
+                    FixedPathsSource(developerToolCaches.map {
+                        .init(url: caches.appendingPathComponent($0, isDirectory: true), owner: nil)
+                    }),
                     ChildrenSource(
                         root: developer.appendingPathComponent("Xcode/DerivedData", isDirectory: true),
                         ownership: .fixed("com.apple.dt.Xcode")
