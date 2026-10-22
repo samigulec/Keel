@@ -40,7 +40,7 @@ final class AssistantModel {
     private let status: SystemStatus
     private let cleanup: CleanupModel
     private let performance: PerformanceModel
-    @ObservationIgnored private var engine: AssistantEngine?
+    @ObservationIgnored private var session: (any ChatSession)?
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private var chatID = UUID()
 
@@ -50,8 +50,12 @@ final class AssistantModel {
         self.performance = performance
         let saved = AIConnection.load()
         // A saved connection whose key has gone (e.g. removed in Keychain Access) is not usable.
-        if let saved, !saved.needsKey || KeychainStore.read(account: saved.keychainAccount) != nil {
+        if let saved, !saved.needsKey || KeychainStore.read(account: saved.keychainAccount) != nil,
+           saved.kind != .apple || AppleIntelligence.isAvailable {
             connection = saved
+        } else if saved == nil, AppleIntelligence.isAvailable {
+            // Nothing to set up: start with the free on-device model.
+            connection = .apple
         }
     }
 
@@ -78,7 +82,7 @@ final class AssistantModel {
     func startNewChat() {
         runTask?.cancel()
         chatID = UUID()
-        engine = nil
+        session = nil
         items = []
         appliedProposals = [:]
         isRunning = false
@@ -96,8 +100,8 @@ final class AssistantModel {
         let chat = chatID
         runTask = Task {
             do {
-                let engine = try currentEngine()
-                try await engine.send(message) { [weak self] event in
+                let session = try currentSession()
+                try await session.send(message) { [weak self] event in
                     guard let self, self.chatID == chat else { return }
                     self.handle(event)
                 }
@@ -121,23 +125,40 @@ final class AssistantModel {
         runTask?.cancel()
     }
 
-    private func currentEngine() throws -> AssistantEngine {
-        if let engine { return engine }
+    private func currentSession() throws -> any ChatSession {
+        if let session { return session }
         guard let connection else { throw AIError.invalidResponse("Bağlantı yok") }
-        let key = connection.needsKey ? KeychainStore.read(account: connection.keychainAccount) : nil
         let chat = chatID
-        let tools = KeelTools.make(status: status, cleanup: cleanup, performance: performance) { [weak self] proposal in
+        let isOnDevice = connection.kind == .apple
+        let tools = KeelTools.make(status: status, cleanup: cleanup, performance: performance, compact: isOnDevice) { [weak self] proposal in
             guard let self, self.chatID == chat else { return }
             self.items.append(ChatItem(kind: .proposal(proposal)))
         }
-        let engine = AssistantEngine(
-            backend: try connection.backend(apiKey: key),
-            transport: URLSessionTransport(),
-            systemPrompt: Self.systemPrompt,
-            tools: tools
-        )
-        self.engine = engine
-        return engine
+
+        let session: any ChatSession
+        if isOnDevice {
+            guard let apple = AppleIntelligence.makeSession(
+                tools: tools,
+                instructions: Self.systemPrompt + Self.onDeviceAddendum,
+                onToolEvent: { [weak self] event in
+                    guard let self, self.chatID == chat else { return }
+                    self.handle(event)
+                }
+            ) else {
+                throw AIError.invalidResponse("Apple Intelligence şu an kullanılamıyor.")
+            }
+            session = apple
+        } else {
+            let key = connection.needsKey ? KeychainStore.read(account: connection.keychainAccount) : nil
+            session = AssistantEngine(
+                backend: try connection.backend(apiKey: key),
+                transport: URLSessionTransport(),
+                systemPrompt: Self.systemPrompt,
+                tools: tools
+            )
+        }
+        self.session = session
+        return session
     }
 
     private func handle(_ event: AssistantEvent) {
@@ -219,7 +240,16 @@ final class AssistantModel {
     - Privacy: you only receive the summaries Keel's tools return (sizes, app and folder names, readings). You never see file contents.
     """
 
+    /// The on-device model has a small context window; ask for short answers.
+    static let onDeviceAddendum = """
+
+    Keep every answer under 120 words. Call at most two tools per question.
+    """
+
     static func describe(_ error: any Error, connection: AIConnection?) -> String {
+        if let message = AppleIntelligence.describe(error) {
+            return message
+        }
         if let error = error as? AIError {
             switch error {
             case .http(let status, _) where status == 401 || status == 403:

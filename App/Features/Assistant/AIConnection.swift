@@ -4,6 +4,8 @@ import KeelCore
 /// Which AI the user connected. The API key is kept in the Keychain, not here.
 struct AIConnection: Codable, Equatable {
     enum Kind: String, Codable {
+        /// Apple's on-device model: no key, no account, nothing leaves the Mac.
+        case apple
         case claude
         case openAICompatible
     }
@@ -15,9 +17,11 @@ struct AIConnection: Codable, Equatable {
     var baseURL: String?
 
     static let claudeDefault = AIConnection(kind: .claude, model: AnthropicBackend.defaultModel)
+    static let apple = AIConnection(kind: .apple, model: "on-device")
 
     var keychainAccount: String {
         switch kind {
+        case .apple: "apple"
         case .claude: "anthropic"
         case .openAICompatible: "openai-compatible:\(baseURL ?? "")"
         }
@@ -25,6 +29,7 @@ struct AIConnection: Codable, Equatable {
 
     var needsKey: Bool {
         switch kind {
+        case .apple: false
         case .claude: true
         case .openAICompatible: preset?.needsKey ?? true
         }
@@ -36,17 +41,26 @@ struct AIConnection: Codable, Equatable {
 
     var providerName: String {
         switch kind {
+        case .apple: "Apple Intelligence"
         case .claude: "Claude"
         case .openAICompatible: preset?.name ?? "OpenAI uyumlu"
         }
     }
 
     var modelName: String {
-        AnthropicBackend.models.first { $0.id == model }?.name ?? model
+        if kind == .apple { return "Cihaz üzerinde" }
+        return AnthropicBackend.models.first { $0.id == model }?.name ?? model
+    }
+
+    /// Runs on this Mac: nothing is sent to a server.
+    var isLocal: Bool {
+        kind == .apple || (baseURL.map { $0.contains("localhost") || $0.contains("127.0.0.1") } ?? false)
     }
 
     func backend(apiKey: String?) throws -> any ChatBackend {
         switch kind {
+        case .apple:
+            throw AIError.invalidResponse("Apple Intelligence HTTP üzerinden çalışmaz")
         case .claude:
             return AnthropicBackend(apiKey: apiKey ?? "", model: model)
         case .openAICompatible:

@@ -1,87 +1,197 @@
+import AppKit
 import KeelCore
 import SwiftUI
 
-/// Connects Keel AI to the user's own AI: Claude, or any OpenAI-compatible service.
+/// Connects Keel AI: Apple's free on-device model with one click, or a
+/// stronger cloud model with a guided, tested API key.
 struct ConnectionForm: View {
     @Environment(AssistantModel.self) private var model
     var onDone: (() -> Void)?
 
-    @State private var kind: AIConnection.Kind = .claude
+    private enum Choice: Hashable {
+        case claude
+        case other
+    }
+
+    @State private var choice: Choice = .claude
     @State private var claudeModel = AnthropicBackend.defaultModel
     @State private var presetID = OpenAICompatibleBackend.presets[0].id
     @State private var baseURL = OpenAICompatibleBackend.presets[0].baseURL
     @State private var otherModel = ""
+    @State private var fetchedModels: [String] = []
     @State private var apiKey = ""
-    @State private var error: String?
+    @State private var clipboardKey: String?
+    @State private var isTesting = false
+    @State private var message: (text: String, isError: Bool)?
+
+    private var apple: AppleIntelligence.Status { AppleIntelligence.status }
 
     private var preset: OpenAICompatibleBackend.Preset? {
         OpenAICompatibleBackend.presets.first { $0.id == presetID }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Picker("Sağlayıcı", selection: $kind) {
-                Text("Claude").tag(AIConnection.Kind.claude)
-                Text("Diğer (OpenAI uyumlu)").tag(AIConnection.Kind.openAICompatible)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+        VStack(alignment: .leading, spacing: 22) {
+            appleOption
 
-            switch kind {
-            case .claude: claudeFields
-            case .openAICompatible: otherFields
-            }
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Daha güçlü bir model bağla")
+                    .font(.keel(16, .extraBold))
+                    .foregroundStyle(Palette.hull)
+                Picker("Sağlayıcı", selection: $choice) {
+                    Text("Claude").tag(Choice.claude)
+                    Text("Diğer servisler").tag(Choice.other)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
 
-            if let error {
-                Text(error)
-                    .font(.keel(13, .semibold))
-                    .foregroundStyle(Palette.danger)
-            }
+                switch choice {
+                case .claude: claudeSteps
+                case .other: otherFields
+                }
 
-            HStack(spacing: 12) {
-                Button("Bağlan", action: connect)
+                if let message {
+                    Label(message.text, systemImage: message.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .font(.keel(13, .semibold))
+                        .foregroundStyle(message.isError ? Palette.danger : Palette.mintText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Button(action: testAndConnect) {
+                        if isTesting {
+                            ProgressView().controlSize(.small).tint(.white)
+                        } else {
+                            Text("Test et ve bağlan")
+                        }
+                    }
                     .buttonStyle(.keelPrimary)
-                    .disabled(!canConnect)
-                if let onDone {
-                    Button("Vazgeç", action: onDone)
-                        .buttonStyle(.keelSecondary)
+                    .disabled(!canConnect || isTesting)
+
+                    if let onDone {
+                        Button("Vazgeç", action: onDone)
+                            .buttonStyle(.keelSecondary)
+                    }
                 }
             }
         }
-        .onAppear(perform: loadCurrent)
+        .onAppear {
+            loadCurrent()
+            checkClipboard()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Back from the browser with a freshly copied key.
+            checkClipboard()
+        }
     }
 
-    private var claudeFields: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            FieldLabel("Model")
-            Picker("Model", selection: $claudeModel) {
-                ForEach(AnthropicBackend.models) { option in
-                    Text("\(option.name): \(option.summary)").tag(option.id)
+    // MARK: Apple Intelligence
+
+    private var appleOption: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: "apple.intelligence")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(Palette.mintText)
+                .frame(width: 44, height: 44)
+                .background(Palette.mint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text("Apple Intelligence")
+                        .font(.keel(16, .extraBold))
+                        .foregroundStyle(Palette.hull)
+                    Pill(text: "Ücretsiz · Cihazda")
+                }
+                switch apple {
+                case .available:
+                    Text("Kurulum ve hesap gerekmez; veriler Mac'inden çıkmaz. Daha kısa ve basit yanıtlar verir.")
+                        .font(.keel(13, .medium))
+                        .foregroundStyle(Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .unavailable(let reason):
+                    Text(reason)
+                        .font(.keel(13, .medium))
+                        .foregroundStyle(Palette.warningText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .labelsHidden()
+            Spacer(minLength: 12)
+            if model.connection?.kind == .apple {
+                Label("Kullanılıyor", systemImage: "checkmark.circle.fill")
+                    .font(.keel(13, .bold))
+                    .foregroundStyle(Palette.mintText)
+            } else {
+                Button("Kullan") {
+                    try? model.connect(.apple, apiKey: nil)
+                    onDone?()
+                }
+                .buttonStyle(.keelSecondary)
+                .disabled(apple != .available)
+            }
+        }
+        .padding(18)
+        .background(Palette.mist, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border) }
+    }
 
-            FieldLabel("Claude API anahtarı")
-            SecureField("sk-ant-…", text: $apiKey)
-                .textFieldStyle(.roundedBorder)
-            Text("Anahtarı Claude Console'dan alırsın; kullandıkça ücretlendirilir. Claude.ai aboneliği (Pro/Max) API kullanımını kapsamaz.")
+    // MARK: Claude
+
+    private var claudeSteps: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Step(number: 1, title: "Claude Console'da bir anahtar oluştur") {
+                Text("Giriş yap → API Keys → Create Key. Anahtarı kopyala ve buraya dön.")
+                    .font(.keel(13, .medium))
+                    .foregroundStyle(Palette.slate)
+                Link(destination: URL(string: "https://console.anthropic.com/settings/keys")!) {
+                    Label("Claude Console'u aç", systemImage: "arrow.up.right.square")
+                        .font(.keel(13, .bold))
+                }
+            }
+
+            Step(number: 2, title: "Anahtarı yapıştır") {
+                if let clipboardKey, apiKey != clipboardKey {
+                    Button {
+                        apiKey = clipboardKey
+                        message = nil
+                    } label: {
+                        Label("Panodaki anahtarı kullan (\(Self.masked(clipboardKey)))", systemImage: "doc.on.clipboard")
+                            .font(.keel(13, .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.mintText)
+                }
+                SecureField("sk-ant-…", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
+                Text("Anahtar yalnızca bu Mac'in Keychain'inde saklanır.")
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.slate)
+            }
+
+            Step(number: 3, title: "Model seç") {
+                Picker("Model", selection: $claudeModel) {
+                    ForEach(AnthropicBackend.models) { option in
+                        Text("\(option.name): \(option.summary)").tag(option.id)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            Text("Kullandıkça ücretlendirilir; Claude.ai aboneliği (Pro/Max) API kullanımını kapsamaz.")
                 .font(.keel(12, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)
-            Link("Claude Console'da anahtar oluştur", destination: URL(string: "https://console.anthropic.com/settings/keys")!)
-                .font(.keel(13, .bold))
         }
     }
 
+    // MARK: Other services
+
     private var otherFields: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            FieldLabel("Servis")
+        VStack(alignment: .leading, spacing: 12) {
             Picker("Servis", selection: $presetID) {
                 ForEach(OpenAICompatibleBackend.presets) { preset in
                     Text(preset.name).tag(preset.id)
                 }
             }
-            .labelsHidden()
             .onChange(of: presetID) { oldValue, newValue in
                 // Follow the preset's address unless the user typed their own.
                 let presets = OpenAICompatibleBackend.presets
@@ -89,25 +199,39 @@ struct ConnectionForm: View {
                 if baseURL.isEmpty || baseURL == presets.first(where: { $0.id == oldValue })?.baseURL {
                     baseURL = next.baseURL
                 }
+                fetchedModels = []
+                message = nil
             }
 
-            FieldLabel("Sunucu adresi")
-            TextField("https://…/v1", text: $baseURL)
-                .textFieldStyle(.roundedBorder)
-
-            FieldLabel("Model")
-            TextField(preset?.modelHint ?? "Model adı", text: $otherModel)
+            TextField("Sunucu adresi", text: $baseURL)
                 .textFieldStyle(.roundedBorder)
 
             if preset?.needsKey ?? true {
-                FieldLabel("API anahtarı")
-                SecureField("Anahtar", text: $apiKey)
+                SecureField("API anahtarı", text: $apiKey)
                     .textFieldStyle(.roundedBorder)
             } else {
                 Text("Yerel model: veriler bilgisayarından çıkmaz, anahtar gerekmez.")
                     .font(.keel(12, .medium))
                     .foregroundStyle(Palette.slate)
             }
+
+            HStack(spacing: 10) {
+                if fetchedModels.isEmpty {
+                    TextField(preset?.modelHint ?? "Model adı", text: $otherModel)
+                        .textFieldStyle(.roundedBorder)
+                } else {
+                    Picker("Model", selection: $otherModel) {
+                        ForEach(fetchedModels, id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden()
+                }
+                Button("Modelleri getir") { Task { await fetchOtherModels() } }
+                    .buttonStyle(.plain)
+                    .font(.keel(13, .bold))
+                    .foregroundStyle(Palette.mintText)
+                    .disabled(isTesting)
+            }
+
             Text("Araç kullanabilen (function calling) bir model seç; yoksa Keel AI sistem verilerini okuyamaz.")
                 .font(.keel(12, .medium))
                 .foregroundStyle(Palette.slate)
@@ -115,11 +239,13 @@ struct ConnectionForm: View {
         }
     }
 
+    // MARK: Actions
+
     private var draftConnection: AIConnection {
-        switch kind {
+        switch choice {
         case .claude:
             AIConnection(kind: .claude, model: claudeModel)
-        case .openAICompatible:
+        case .other:
             AIConnection(
                 kind: .openAICompatible,
                 model: otherModel.trimmingCharacters(in: .whitespaces),
@@ -129,51 +255,126 @@ struct ConnectionForm: View {
         }
     }
 
-    /// A key is required unless one is already stored for the same account.
-    private var hasKey: Bool {
-        !apiKey.isEmpty || KeychainStore.read(account: draftConnection.keychainAccount) != nil
+    /// The key typed now, or the one already stored for the same account.
+    private var effectiveKey: String? {
+        let typed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return typed.isEmpty ? KeychainStore.read(account: draftConnection.keychainAccount) : typed
     }
 
     private var canConnect: Bool {
         let connection = draftConnection
         guard !connection.model.isEmpty else { return false }
         if connection.kind == .openAICompatible, URL(string: connection.baseURL ?? "")?.scheme == nil { return false }
-        return !connection.needsKey || hasKey
+        return !connection.needsKey || effectiveKey != nil
     }
 
-    private func connect() {
+    private func testAndConnect() {
+        let connection = draftConnection
+        let key = effectiveKey
+        isTesting = true
+        message = nil
+        Task {
+            defer { isTesting = false }
+            do {
+                // Listing models is free and proves the key and address work.
+                let models: [String]
+                switch connection.kind {
+                case .claude:
+                    models = try await ModelCatalog.claudeModels(apiKey: key ?? "")
+                case .openAICompatible:
+                    models = try await ModelCatalog.openAICompatibleModels(baseURL: URL(string: connection.baseURL ?? "")!, apiKey: key)
+                case .apple:
+                    models = []
+                }
+                if connection.kind != .apple, !models.isEmpty, !models.contains(connection.model) {
+                    message = ("Anahtar çalışıyor ama \(connection.modelName) bu hesapta görünmüyor. Başka bir model seç.", true)
+                    return
+                }
+                let typed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                try model.connect(connection, apiKey: typed.isEmpty ? nil : typed)
+                apiKey = ""
+                message = ("Bağlandı.", false)
+                onDone?()
+            } catch {
+                message = (Self.describeTestFailure(error, connection: connection), true)
+            }
+        }
+    }
+
+    private func fetchOtherModels() async {
+        guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespaces)) else { return }
+        isTesting = true
+        defer { isTesting = false }
         do {
-            try model.connect(draftConnection, apiKey: apiKey.isEmpty ? nil : apiKey)
-            apiKey = ""
-            error = nil
-            onDone?()
+            let models = try await ModelCatalog.openAICompatibleModels(baseURL: url, apiKey: effectiveKey).sorted()
+            fetchedModels = models
+            if !models.contains(otherModel) { otherModel = models.first ?? "" }
+            message = models.isEmpty ? ("Sunucu hiç model döndürmedi.", true) : ("\(models.count) model bulundu.", false)
         } catch {
-            self.error = "Anahtar Keychain'e kaydedilemedi."
+            message = (Self.describeTestFailure(error, connection: draftConnection), true)
+        }
+    }
+
+    /// Offers a Claude key found on the clipboard, so the user need not paste it.
+    private func checkClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              text.hasPrefix("sk-ant-"), !text.contains(" "), text.count > 20 else {
+            clipboardKey = nil
+            return
+        }
+        clipboardKey = text
+        if choice == .claude, apiKey.isEmpty, model.connection?.kind != .claude {
+            message = ("Panoda bir Claude anahtarı var.", false)
         }
     }
 
     private func loadCurrent() {
         guard let current = model.connection else { return }
-        kind = current.kind
         switch current.kind {
+        case .apple:
+            break
         case .claude:
+            choice = .claude
             claudeModel = current.model
         case .openAICompatible:
+            choice = .other
             presetID = current.presetID ?? presetID
             baseURL = current.baseURL ?? baseURL
             otherModel = current.model
         }
     }
-}
 
-private struct FieldLabel: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
+    private static func masked(_ key: String) -> String {
+        "…" + key.suffix(4)
     }
 
+    private static func describeTestFailure(_ error: any Error, connection: AIConnection) -> String {
+        if case .http(let status, _)? = error as? AIError, status == 401 || status == 403 {
+            return "Anahtar geçersiz. Console'dan yeniden kopyalayıp dene."
+        }
+        return AssistantModel.describe(error, connection: connection)
+    }
+}
+
+private struct Step<Content: View>: View {
+    let number: Int
+    let title: String
+    @ViewBuilder var content: Content
+
     var body: some View {
-        Text(text).eyebrowStyle()
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.keel(13, .extraBold))
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(Palette.hull, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.keel(14, .bold))
+                    .foregroundStyle(Palette.hull)
+                content
+            }
+        }
     }
 }

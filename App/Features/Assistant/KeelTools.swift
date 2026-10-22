@@ -22,10 +22,13 @@ enum KeelTools {
         "propose_cleanup": "Temizlik önerisi",
     ]
 
+    /// `compact` trims tool output for models with a small context window,
+    /// such as Apple's on-device model.
     static func make(
         status: SystemStatus,
         cleanup: CleanupModel,
         performance: PerformanceModel,
+        compact: Bool = false,
         propose: @escaping @MainActor (CleanupProposal) -> Void
     ) -> [AITool] {
         let noInput: JSONValue = ["type": "object", "properties": [:], "additionalProperties": false]
@@ -36,7 +39,7 @@ enum KeelTools {
                 description: "Reads the Mac's current state: chip, CPU load per core, GPU load, memory use and pressure with its breakdown and swap, disk space and throughput, battery health, temperature state and uptime. Call this whenever the user asks why the Mac is slow, hot, loud or low on space, or about memory, CPU, GPU, battery or storage.",
                 inputSchema: noInput
             ) { _ in
-                systemStatus(status).encodedString()
+                systemStatus(status, compact: compact).encodedString()
             },
 
             AITool(
@@ -45,7 +48,7 @@ enum KeelTools {
                 inputSchema: noInput
             ) { _ in
                 let results = await cleanup.scanAndWait()
-                return cleanupSummary(results, appNames: cleanup.runningAppNames).encodedString()
+                return cleanupSummary(results, appNames: cleanup.runningAppNames, compact: compact).encodedString()
             },
 
             AITool(
@@ -54,7 +57,7 @@ enum KeelTools {
                 inputSchema: noInput
             ) { _ in
                 await performance.refreshApps()
-                return JSONValue.array(performance.topApps.map { app in
+                return JSONValue.array(performance.topApps.prefix(compact ? 5 : 8).map { app in
                     ["app": .string(app.name), "memory_mb": .number(Double(app.footprintBytes / 1_048_576))]
                 }).encodedString()
             },
@@ -65,14 +68,18 @@ enum KeelTools {
                 inputSchema: noInput
             ) { _ in
                 await performance.refreshLaunchItems()
-                return JSONValue.array(performance.launchItems.map { item in
-                    [
+                let items = compact ? Array(performance.activeLaunchItems.prefix(12)) : performance.launchItems
+                return JSONValue.array(items.map { item in
+                    var entry: [String: JSONValue] = [
                         "name": .string(item.displayName),
-                        "label": .string(item.label),
                         "scope": .string(item.scope.rawValue),
                         "starts": .string(item.isDisabled ? "disabled" : item.keepsAlive ? "always" : item.runsAtLoad ? "at_login" : "on_demand"),
-                        "program": item.program.map(JSONValue.string) ?? .null,
                     ]
+                    if !compact {
+                        entry["label"] = .string(item.label)
+                        entry["program"] = item.program.map(JSONValue.string) ?? .null
+                    }
+                    return .object(entry)
                 }).encodedString()
             },
 
@@ -129,7 +136,7 @@ enum KeelTools {
         .number((value * 100).rounded())
     }
 
-    static func systemStatus(_ status: SystemStatus) -> JSONValue {
+    static func systemStatus(_ status: SystemStatus, compact: Bool = false) -> JSONValue {
         let info = status.info
         var result: [String: JSONValue] = [
             "chip": info.chipName.map(JSONValue.string) ?? .null,
@@ -168,7 +175,7 @@ enum KeelTools {
         if let loads = status.loadAverages {
             cpu["load_average_1_5_15"] = .array(loads.map { .number(($0 * 10).rounded() / 10) })
         }
-        if !status.perCoreUsage.isEmpty {
+        if !compact, !status.perCoreUsage.isEmpty {
             cpu["per_core_percent"] = .array(status.perCoreUsage.map(percent))
         }
         result["cpu"] = .object(cpu)
@@ -213,7 +220,7 @@ enum KeelTools {
         return .object(result)
     }
 
-    static func cleanupSummary(_ results: [CategoryScanResult], appNames: [String: String]) -> JSONValue {
+    static func cleanupSummary(_ results: [CategoryScanResult], appNames: [String: String], compact: Bool = false) -> JSONValue {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return .array(results.map { result in
             let skipped = Set(result.skipped.compactMap { item -> String? in
@@ -228,7 +235,7 @@ enum KeelTools {
                 "removal": .string(result.category.removal == .deletePermanently ? "deleted_permanently" : "moved_to_trash"),
                 "unreadable": .bool(result.items.isEmpty && !result.unreadableRoots.isEmpty),
                 "skipped_because_running": .array(skipped.sorted().map(JSONValue.string)),
-                "largest_items": .array(result.items.prefix(5).map { item in
+                "largest_items": .array(result.items.prefix(compact ? 2 : 5).map { item in
                     let path = item.url.path.hasPrefix(home) ? "~" + item.url.path.dropFirst(home.count) : item.url.path
                     return ["path": .string(path), "size_mb": .number(Double(item.sizeBytes / 1_000_000))]
                 }),

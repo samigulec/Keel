@@ -152,8 +152,10 @@ struct AssistantView: View {
                         .font(.keelMono(13, .medium))
                         .foregroundStyle(Palette.Sidebar.text)
                     HStack(spacing: 16) {
-                        Button("Değiştir") { editingConnection = true }
-                        Button("Bağlantıyı kaldır", action: model.disconnect)
+                        Button(connection.kind == .apple ? "Daha güçlü model bağla" : "Değiştir") { editingConnection = true }
+                        if connection.kind != .apple {
+                            Button("Bağlantıyı kaldır", action: model.disconnect)
+                        }
                     }
                     .buttonStyle(.plain)
                     .font(.keel(13, .bold))
@@ -163,32 +165,20 @@ struct AssistantView: View {
                 .keelCard(padding: 22, radius: 20, fill: Palette.hull)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Neler paylaşılır?")
-                    .font(.keel(16, .extraBold))
-                    .foregroundStyle(Palette.hull)
-                ForEach(Self.sharing, id: \.self) { line in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Palette.mintText)
-                        Text(line)
-                            .font(.keel(13, .medium))
-                            .foregroundStyle(Palette.slate)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Palette.danger)
-                    Text("Dosyalarının içeriği asla gönderilmez.")
-                        .font(.keel(13, .bold))
+            if model.connection?.isLocal == true {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Tamamen bu Mac'te", systemImage: "lock.fill")
+                        .font(.keel(16, .extraBold))
                         .foregroundStyle(Palette.hull)
+                    Text("Model bilgisayarında çalışıyor; sorduğun hiçbir şey ve hiçbir sistem verisi Mac'inden çıkmıyor.")
+                        .font(.keel(13, .medium))
+                        .foregroundStyle(Palette.slate)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .keelCard(padding: 22, radius: 20)
+            } else {
+                sharingCard
             }
-            .keelCard(padding: 22, radius: 20)
 
             Button {
                 model.startNewChat()
@@ -199,6 +189,35 @@ struct AssistantView: View {
             .buttonStyle(.keelSecondary)
             .disabled(model.items.isEmpty)
         }
+    }
+
+    private var sharingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Neler paylaşılır?")
+                .font(.keel(16, .extraBold))
+                .foregroundStyle(Palette.hull)
+            ForEach(Self.sharing, id: \.self) { line in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Palette.mintText)
+                    Text(line)
+                        .font(.keel(13, .medium))
+                        .foregroundStyle(Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Palette.danger)
+                Text("Dosyalarının içeriği asla gönderilmez.")
+                    .font(.keel(13, .bold))
+                    .foregroundStyle(Palette.hull)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .keelCard(padding: 22, radius: 20)
     }
 
     private static let sharing = [
@@ -219,7 +238,7 @@ private struct ConnectCard: View {
                     Text("Kendi yapay zekanı bağla")
                         .font(.keel(20, .extraBold))
                         .foregroundStyle(Palette.hull)
-                    Text("Claude, OpenAI, Gemini, OpenRouter ya da bilgisayarında çalışan Ollama / LM Studio.")
+                    Text("Apple Intelligence, Claude, OpenAI, Gemini, OpenRouter ya da bilgisayarında çalışan Ollama / LM Studio.")
                         .font(.keel(14, .medium))
                         .foregroundStyle(Palette.slate)
                         .fixedSize(horizontal: false, vertical: true)
