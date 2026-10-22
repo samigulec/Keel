@@ -22,9 +22,31 @@ struct CardModifier: ViewModifier {
     }
 }
 
+/// The highlighted panel: teal to blue, raised off the ground.
+struct SummaryCardModifier: ViewModifier {
+    var padding: CGFloat
+    var radius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.summary, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18))
+            }
+            .shadow(color: .black.opacity(0.35), radius: 30, y: 18)
+    }
+}
+
 extension View {
-    func keelCard(padding: CGFloat = 24, radius: CGFloat = 18, fill: Color = Palette.card) -> some View {
+    func keelCard(padding: CGFloat = 24, radius: CGFloat = 22, fill: Color = Palette.card) -> some View {
         modifier(CardModifier(padding: padding, radius: radius, fill: fill))
+    }
+
+    func keelSummaryCard(padding: CGFloat = 24, radius: CGFloat = 22) -> some View {
+        modifier(SummaryCardModifier(padding: padding, radius: radius))
     }
 }
 
@@ -44,11 +66,12 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         EnabledAware {
             configuration.label
-                .font(.keel(16, .bold))
-                .foregroundStyle(.white)
+                .font(.keel(16, .extraBold))
+                .foregroundStyle(Palette.onAccent)
                 .padding(.horizontal, 28)
                 .frame(minHeight: 52)
-                .background(Palette.hull, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Palette.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: Palette.keelGreen.opacity(0.35), radius: 14, y: 8)
                 .opacity(configuration.isPressed ? 0.85 : 1)
         }
     }
@@ -59,27 +82,28 @@ struct SecondaryButtonStyle: ButtonStyle {
         EnabledAware {
             configuration.label
                 .font(.keel(16, .bold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
                 .padding(.horizontal, 22)
                 .frame(minHeight: 52)
-                .background(Palette.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Palette.controlBorder)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.controlBorder)
                 }
                 .opacity(configuration.isPressed ? 0.85 : 1)
         }
     }
 }
 
-/// Keel Green on dark surfaces, e.g. the "Temizle" button in the summary panel.
+/// The full-width accent button on summary panels, e.g. "Temizle".
 struct AccentButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         EnabledAware {
             configuration.label
-                .font(.keel(16, .extraBold))
-                .foregroundStyle(Palette.hull)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Palette.keelGreen, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .font(.keel(17, .extraBold))
+                .foregroundStyle(Palette.onAccent)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .background(Palette.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: Palette.keelGreen.opacity(0.4), radius: 15, y: 12)
                 .opacity(configuration.isPressed ? 0.85 : 1)
         }
     }
@@ -101,7 +125,8 @@ extension ButtonStyle where Self == SecondaryButtonStyle {
 
 struct ProgressBar: View {
     var fraction: Double
-    var tint: Color = Palette.hull
+    /// nil, or Keel Green, draws the mint-to-cyan accent.
+    var tint: Color? = nil
     var track: Color = Palette.track
     var height: CGFloat = 8
 
@@ -109,9 +134,14 @@ struct ProgressBar: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(track)
-                Capsule()
-                    .fill(tint)
-                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
+                Group {
+                    if let tint, tint != Palette.keelGreen {
+                        Capsule().fill(tint)
+                    } else {
+                        Capsule().fill(Palette.accentBar)
+                    }
+                }
+                .frame(width: proxy.size.width * min(max(fraction, 0), 1))
             }
         }
         .frame(height: height)
@@ -125,7 +155,7 @@ struct ProgressBar: View {
 struct ByteAmount: View {
     var bytes: Int64?
     var size: CGFloat
-    var color: Color = Palette.hull
+    var color: Color = Palette.text
     var base: ByteFormat.Base = .decimal
 
     var body: some View {
@@ -168,12 +198,12 @@ struct PageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.keel(32, .extraBold))
-                .tracking(-0.6)
-                .foregroundStyle(Palette.hull)
+                .font(.keel(36, .bold))
+                .tracking(-1)
+                .foregroundStyle(Palette.text)
             Text(subtitle)
-                .font(.keel(15, .medium))
-                .foregroundStyle(Palette.slate)
+                .font(.keel(16, .medium))
+                .foregroundStyle(Palette.subtle)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)

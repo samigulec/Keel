@@ -108,7 +108,7 @@ private struct BigNumber: View {
         Text(text)
             .font(.keelMono(30, .semibold))
             .tracking(-1.8)
-            .foregroundStyle(Palette.hull)
+            .foregroundStyle(Palette.text)
     }
 }
 
@@ -152,7 +152,7 @@ private struct LegendRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.keel(14, .semibold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 if let detail {
                     Text(detail)
                         .font(.keel(12, .medium))
@@ -163,7 +163,7 @@ private struct LegendRow: View {
             Spacer(minLength: 8)
             Text(value)
                 .font(.keelMono(13, .semibold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
         }
     }
 }
@@ -225,8 +225,7 @@ private struct SystemOverview: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.hull, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .keelSummaryCard(padding: 0, radius: 24)
     }
 
     private func facts(thermal: (String, Color)) -> FactList {
@@ -370,9 +369,9 @@ private struct MemoryBar: View {
     let memory: MemorySnapshot?
 
     static let appColor = Palette.keelGreen
-    static let wiredColor = Color(hex: 0x0B6B53)
-    static let compressedColor = Color(hex: 0xC2570C)
-    static let cachedColor = Color(hex: 0xA9D8C6)
+    static let wiredColor = Color(hex: 0x1BA7D6)
+    static let compressedColor = Color(hex: 0xF0782F)
+    static let cachedColor = Color.white.opacity(0.35)
 
     var body: some View {
         GeometryReader { proxy in
@@ -441,7 +440,7 @@ private struct DiskLiveCard: View {
             Text(value.map(Format.speed) ?? "—")
                 .font(.keelMono(20, .semibold))
                 .tracking(-1)
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
         }
     }
 }
@@ -523,7 +522,7 @@ private struct StorageCard: View {
             CardTitle(title: "SSD", status: device.map { $0.isInternal ? "Dahili" : "Harici" })
             Text(device?.model ?? "Başlangıç diski")
                 .font(.keel(18, .extraBold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
             if let interconnect = device?.interconnect {
                 Text("Bağlantı: \(interconnect)")
                     .font(.keel(13, .medium))
@@ -536,7 +535,7 @@ private struct StorageCard: View {
                         .font(.keel(13, .semibold))
                         .foregroundStyle(Palette.slate)
                 }
-                ProgressBar(fraction: disk.usedFraction, tint: disk.usedFraction > 0.9 ? Palette.warning : Palette.hull)
+                ProgressBar(fraction: disk.usedFraction, tint: disk.usedFraction > 0.9 ? Palette.warning : nil)
             }
             if let totals {
                 Text("Açılıştan beri \(ByteFormat.string(Int64(clamping: totals.readBytes))) okundu, \(ByteFormat.string(Int64(clamping: totals.writtenBytes))) yazıldı")
@@ -603,7 +602,7 @@ private struct TopAppsCard: View {
                         }
                         Text(app.name)
                             .font(.keel(15, .semibold))
-                            .foregroundStyle(Palette.hull)
+                            .foregroundStyle(Palette.text)
                             .lineLimit(1)
                         Spacer(minLength: 12)
                         ByteAmount(bytes: Int64(clamping: app.footprintBytes), size: 14, base: .binary)
@@ -648,7 +647,7 @@ private struct LaunchItemsCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.displayName)
                                 .font(.keel(15, .semibold))
-                                .foregroundStyle(Palette.hull)
+                                .foregroundStyle(Palette.text)
                                 .lineLimit(1)
                             Text(scopeText(item.scope))
                                 .font(.keel(12, .medium))
@@ -704,7 +703,7 @@ private struct ListHeader<Accessory: View>: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title)
                 .font(.keel(18, .extraBold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
             Text(detail)
                 .font(.keel(13, .medium))
                 .foregroundStyle(Palette.slate)

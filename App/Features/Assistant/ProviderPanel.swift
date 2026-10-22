@@ -35,7 +35,7 @@ struct ProviderMark: View {
         case .chatGPT:
             Text("G")
                 .font(.keel(size * 0.5, .extraBold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Color(hex: 0x0F1A17))
         case .apple:
             Image(systemName: "apple.intelligence")
                 .font(.system(size: size * 0.48, weight: .semibold))
@@ -98,7 +98,7 @@ private struct ProviderCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.keel(16, .bold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 Text(subtitle)
                     .font(.keel(12, .medium))
                     .foregroundStyle(Palette.slate)
@@ -247,12 +247,12 @@ struct TileButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.keel(12, .bold))
-            .foregroundStyle(prominent ? .white : (tone == .danger ? Palette.danger : Palette.hull))
+            .foregroundStyle(prominent ? Palette.onAccent : (tone == .danger ? Palette.danger : Palette.text))
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 11)
             .frame(height: 30)
-            .background(prominent ? Palette.hull : Palette.mist, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(prominent ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay {
                 if !prominent {
                     RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Palette.border)
@@ -277,7 +277,7 @@ private struct InstallHelp: View {
             HStack(spacing: 8) {
                 Text(tool.installCommand)
                     .font(.keelMono(10, .medium))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                     .textSelection(.enabled)
                     .lineLimit(2)
                 Spacer(minLength: 4)

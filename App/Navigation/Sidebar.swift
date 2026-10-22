@@ -16,7 +16,7 @@ struct Sidebar: View {
             }
             .padding(.horizontal, 10)
 
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 ForEach(AppSection.allCases) { section in
                     SidebarItem(section: section, isSelected: section == selection) {
                         selection = section
@@ -32,7 +32,10 @@ struct Sidebar: View {
         .padding(.top, 52) // clears the window's traffic lights
         .padding(.bottom, 24)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Palette.hull)
+        .background(Palette.Sidebar.background)
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Palette.divider).frame(width: 1)
+        }
     }
 }
 
@@ -44,16 +47,20 @@ private struct SidebarItem: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: section.symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isSelected ? Palette.keelGreen : Palette.Sidebar.text)
-                    .frame(width: 20)
+                Mascot(character: section.mascot, size: 34)
                 Text(section.title)
                     .font(.keel(15, isSelected ? .bold : .semibold))
                     .foregroundStyle(isSelected ? .white : Palette.Sidebar.text)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                if section.phase > 1 {
+                if section == .assistant {
+                    Text("YENİ")
+                        .font(.keel(11, .extraBold))
+                        .foregroundStyle(Palette.onAccent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Palette.accentBar, in: Capsule())
+                } else if section.phase > 1 {
                     Image(systemName: "clock")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(Palette.Sidebar.eyebrow)
@@ -61,12 +68,16 @@ private struct SidebarItem: View {
                         .accessibilityLabel("Yakında")
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 48)
             .background(
                 isSelected ? Palette.Sidebar.selectedBackground : .clear,
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(isSelected ? Palette.Sidebar.selectedBorder : .clear)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -94,13 +105,15 @@ private struct DiskWidget: View {
             }
             ProgressBar(
                 fraction: disk?.usedFraction ?? 0,
-                tint: Palette.keelGreen,
                 track: Palette.Sidebar.widgetTrack,
                 height: 6
             )
         }
         .padding(16)
-        .background(Palette.Sidebar.widgetBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Palette.Sidebar.widgetBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border)
+        }
         .accessibilityElement(children: .combine)
     }
 }

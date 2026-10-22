@@ -12,13 +12,13 @@ struct MenuBarContent: View {
                 KeelLogoTile(size: 26)
                 Text("Keel")
                     .font(.keel(17, .extraBold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
             }
 
             StatRow(title: "İşlemci", fraction: status.cpuUsage) {
                 Text(status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—")
                     .font(.keelMono(13, .semibold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
             }
             StatRow(title: "Bellek", fraction: status.memory?.usedFraction) {
                 ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 13, base: .binary)
@@ -47,8 +47,8 @@ struct MenuBarContent: View {
         }
         .padding(16)
         .frame(width: 260)
-        .background(Palette.mist)
-        .preferredColorScheme(.light)
+        .background(Palette.raised)
+        .preferredColorScheme(.dark)
     }
 }
 

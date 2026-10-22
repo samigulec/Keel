@@ -75,8 +75,8 @@ struct CleanupView: View {
                 }
             }
         }
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
         .disabled(model.phase == .cleaning)
     }
 
@@ -91,7 +91,6 @@ struct CleanupView: View {
                 .foregroundStyle(Palette.Sidebar.text)
             ProgressBar(
                 fraction: model.totalBytes > 0 ? Double(model.selectedBytes) / Double(model.totalBytes) : 0,
-                tint: Palette.keelGreen,
                 track: Palette.Sidebar.widgetTrack,
                 height: 10
             )
@@ -106,7 +105,7 @@ struct CleanupView: View {
                 confirming = true
             } label: {
                 if model.phase == .cleaning {
-                    ProgressView().controlSize(.small).tint(Palette.hull)
+                    ProgressView().controlSize(.small).tint(Palette.onAccent)
                 } else {
                     Text("Temizle")
                 }
@@ -121,8 +120,7 @@ struct CleanupView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .disabled(model.isBusy)
         }
-        .padding(28)
-        .background(Palette.hull, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .keelSummaryCard(padding: 28, radius: 24)
     }
 
     private var confirmationTitle: String {
@@ -168,7 +166,7 @@ private struct CategoryRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(result.category.title)
                         .font(.keel(15, .bold))
-                        .foregroundStyle(Palette.hull)
+                        .foregroundStyle(Palette.text)
                     Text(detailText)
                         .font(.keel(13, .medium))
                         .foregroundStyle(result.category.removal == .deletePermanently ? Palette.warningText : Palette.slate)
@@ -254,7 +252,7 @@ private struct ItemList: View {
                     Spacer(minLength: 12)
                     Text(ByteFormat.string(item.sizeBytes))
                         .font(.keelMono(12, .semibold))
-                        .foregroundStyle(Palette.hull)
+                        .foregroundStyle(Palette.text)
                 }
                 .help(item.url.path)
             }
@@ -280,7 +278,7 @@ private struct CategoryBadge: View {
     var body: some View {
         Text(label)
             .font(.keel(13, .extraBold))
-            .foregroundStyle(Palette.hull)
+            .foregroundStyle(Palette.text)
             .frame(width: 40, height: 40)
             .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityHidden(true)
@@ -300,8 +298,8 @@ private struct CategoryBadge: View {
     private var tint: Color {
         switch category {
         case .userCaches, .trash: Palette.mint
-        case .logs, .browserCaches: Color(hex: 0xE8EEF8)
-        case .developer: Color(hex: 0xF1EEF8)
+        case .logs, .browserCaches: Color(hex: 0x4FD8F5).opacity(0.18)
+        case .developer: Color(hex: 0xA08BFF).opacity(0.2)
         case .oldDownloads: Palette.warningTint
         }
     }
@@ -316,7 +314,7 @@ private struct IdleCard: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Henüz taranmadı")
                 .font(.keel(20, .extraBold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
             Text("Tarama yalnızca okur; neyin ne kadar yer kapladığını gösterir. Silme için ayrıca onayın istenir.")
                 .font(.keel(15, .medium))
                 .foregroundStyle(Palette.slate)
@@ -340,7 +338,7 @@ private struct ScanningCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Taranıyor…")
                     .font(.keel(17, .extraBold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 Text("Önbellekler, günlükler ve indirmeler ölçülüyor")
                     .font(.keel(14, .medium))
                     .foregroundStyle(Palette.slate)
@@ -364,7 +362,7 @@ private struct FullDiskAccessBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Tam Disk Erişimi gerekli")
                     .font(.keel(15, .bold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 Text("Çöp Kutusu gibi korumalı klasörleri görebilmek için Sistem Ayarları > Gizlilik ve Güvenlik > Tam Disk Erişimi'nden Keel'i aç.")
                     .font(.keel(13, .medium))
                     .foregroundStyle(Palette.slate)
@@ -393,7 +391,7 @@ private struct ReportBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(ByteFormat.string(report.freedBytes)) temizlendi")
                     .font(.keel(15, .bold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 Text(detail)
                     .font(.keel(13, .medium))
                     .foregroundStyle(Palette.slate)

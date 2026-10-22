@@ -53,7 +53,7 @@ struct SmartScanView: View {
                 Text(headline)
                     .font(.keel(26, .extraBold))
                     .tracking(-0.4)
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(detail)
                     .font(.keel(15, .medium))
@@ -156,11 +156,24 @@ private struct StatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).eyebrowStyle(color: isDark ? Palette.Sidebar.eyebrow : Palette.slate)
-            ByteAmount(bytes: bytes, size: 26, color: isDark ? .white : Palette.hull, base: base)
+            ByteAmount(bytes: bytes, size: 26, base: base)
             Text(detail)
                 .font(.keel(13, .medium))
                 .foregroundStyle(isDark ? Palette.Sidebar.text : Palette.slate)
         }
-        .keelCard(padding: 22, fill: isDark ? Palette.hull : Palette.card)
+        .modifier(StatCardSurface(isHighlighted: isDark))
+    }
+}
+
+/// The highlighted stat sits on the summary gradient; the others are glass.
+private struct StatCardSurface: ViewModifier {
+    let isHighlighted: Bool
+
+    func body(content: Content) -> some View {
+        if isHighlighted {
+            content.keelSummaryCard(padding: 22)
+        } else {
+            content.keelCard(padding: 22)
+        }
     }
 }

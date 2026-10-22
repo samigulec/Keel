@@ -27,10 +27,11 @@ struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Palette.mist)
         }
+        .background { KeelBackground() }
         .ignoresSafeArea()
-        .preferredColorScheme(.light)
+        .tint(Palette.keelGreen)
+        .preferredColorScheme(.dark)
     }
 
     @ViewBuilder

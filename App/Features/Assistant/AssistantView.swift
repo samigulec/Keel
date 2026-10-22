@@ -91,7 +91,7 @@ private struct PrivacyNote: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(isLocal ? "Tamamen bu Mac'te" : "Neler paylaşılır?", systemImage: isLocal ? "lock.fill" : "eye")
                 .font(.keel(14, .extraBold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
             Text(isLocal
                 ? "Model bilgisayarında çalışıyor; hiçbir veri Mac'inden çıkmıyor."
                 : "Sistem özeti, önbellek klasörlerinin adları ve boyutları, uygulama ve servis adları. Dosyalarının içeriği asla gönderilmez.")
@@ -151,8 +151,8 @@ private struct Conversation: View {
                 }
                 .padding(24)
             }
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.border) }
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
             .onChange(of: model.items.last?.text) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
             .onChange(of: model.items.count) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
         }
@@ -227,23 +227,23 @@ private struct ChatRow: View {
             HStack {
                 Spacer(minLength: 80)
                 Text(item.text)
-                    .font(.keel(15, .medium))
-                    .foregroundStyle(.white)
+                    .font(.keel(15, .semibold))
+                    .foregroundStyle(Palette.onAccent)
                     .textSelection(.enabled)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 11)
+                    .padding(.vertical, 12)
                     .background(
-                        Palette.hull,
-                        in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16, style: .continuous)
+                        Palette.accent,
+                        in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18, style: .continuous)
                     )
             }
 
         case .assistant:
             HStack(alignment: .top, spacing: 12) {
-                KeelLogoTile(size: 30)
+                Mascot(character: .bilge, size: 34)
                 Text(Self.markdown(item.text))
                     .font(.keel(15, .medium))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                     .lineSpacing(3)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -300,7 +300,7 @@ private struct ProposalCard: View {
             if !proposal.reason.isEmpty {
                 Text(proposal.reason)
                     .font(.keel(14, .medium))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -373,7 +373,7 @@ private struct ProposalCard: View {
 
             Text(HomePath.display(item.url))
                 .font(.keelMono(12, .medium))
-                .foregroundStyle(excluded.contains(item.id) ? Palette.slate.opacity(0.6) : Palette.hull)
+                .foregroundStyle(excluded.contains(item.id) ? Palette.slate.opacity(0.6) : Palette.text)
                 .strikethrough(excluded.contains(item.id))
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -381,7 +381,7 @@ private struct ProposalCard: View {
             Spacer(minLength: 8)
             Text(ByteFormat.string(item.sizeBytes))
                 .font(.keelMono(12, .semibold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
         }
         .frame(minHeight: 34)
     }
@@ -397,7 +397,7 @@ private struct ConnectCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Bir yapay zeka bağla")
                         .font(.keel(20, .extraBold))
-                        .foregroundStyle(Palette.hull)
+                        .foregroundStyle(Palette.text)
                     Text("ChatGPT ya da Claude hesabınla giriş yap, veya Mac'indeki Apple Intelligence'ı kullan.")
                         .font(.keel(14, .medium))
                         .foregroundStyle(Palette.slate)
@@ -421,7 +421,7 @@ private struct EmptyChat: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Ne öğrenmek istersin?")
                 .font(.keel(18, .extraBold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
             Text("Keel AI bilgisayarının gerçek durumuna bakarak yanıt verir: bellek, işlemci, disk, pil ve temizlenebilir alan.")
                 .font(.keel(14, .medium))
                 .foregroundStyle(Palette.slate)
@@ -431,7 +431,7 @@ private struct EmptyChat: View {
                     Button(suggestion) { model.send(suggestion) }
                         .buttonStyle(.plain)
                         .font(.keel(13, .semibold))
-                        .foregroundStyle(Palette.hull)
+                        .foregroundStyle(Palette.text)
                         .padding(.horizontal, 14)
                         .frame(minHeight: 36)
                         .background(Palette.card, in: Capsule())
@@ -484,8 +484,8 @@ private struct Composer: View {
                         Image(systemName: "stop.fill")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Palette.hull, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Durdur")
@@ -493,9 +493,9 @@ private struct Composer: View {
                     Button { model.send() } label: {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Palette.hull)
-                            .frame(width: 40, height: 40)
-                            .background(Palette.keelGreen, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Palette.assistant, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -506,8 +506,14 @@ private struct Composer: View {
             .padding(.trailing, 8)
             .padding(.vertical, 6)
         }
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.controlBorder) }
+        // The design's input: dark glass with a soft violet ring.
+        .background(Palette.navy.opacity(0.6), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color(hex: 0xA08BFF).opacity(0.5)) }
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(hex: 0xA08BFF).opacity(0.10))
+                .padding(-4)
+        }
     }
 
     @ViewBuilder
@@ -529,7 +535,7 @@ private struct ChipLabel<Leading: View>: View {
             leading
             Text(text)
                 .font(.keel(13, .bold))
-                .foregroundStyle(Palette.hull)
+                .foregroundStyle(Palette.text)
                 .lineLimit(1)
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .bold))
@@ -659,7 +665,7 @@ private struct ModelPicker: View {
                     .opacity(isCurrent ? 1 : 0)
                 Text(choice.name)
                     .font(.keel(14, isCurrent ? .bold : .medium))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if browsing != .apple, choice.id == AIConnection.defaultModel(for: browsing) {
@@ -726,7 +732,7 @@ private struct EffortPicker: View {
                     .opacity(effort == id ? 1 : 0)
                 Text(name)
                     .font(.keel(14, effort == id ? .bold : .medium))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 Spacer()
                 Text(detail)
                     .font(.keel(12, .medium))

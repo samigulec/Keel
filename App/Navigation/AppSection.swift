@@ -18,16 +18,6 @@ enum AppSection: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .smartScan: "magnifyingglass"
-        case .cleanup: "sparkles"
-        case .performance: "gauge.with.dots.needle.50percent"
-        case .applications: "square.grid.2x2"
-        case .assistant: "bubble.left.and.text.bubble.right"
-        }
-    }
-
     /// The roadmap phase that ships this section (see docs/PLAN.md).
     var phase: Int {
         switch self {

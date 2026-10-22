@@ -42,14 +42,20 @@ struct KeelLogoTile: View {
     var size: CGFloat = 36
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-            .fill(Palette.keelGreen)
+        RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+            .fill(LinearGradient(colors: [Color(hex: 0x5FF5C0), Color(hex: 0x1BA7D6)], startPoint: .topLeading, endPoint: .bottomTrailing))
             .frame(width: size, height: size)
             .overlay {
+                // The glossy top edge from the design.
+                RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .top, endPoint: .center), lineWidth: 1)
+            }
+            .overlay {
                 KeelLogoShape()
-                    .fill(Palette.hull)
+                    .fill(Palette.onAccent)
                     .padding(size * 0.17)
             }
+            .shadow(color: Palette.keelGreen.opacity(0.35), radius: size * 0.25, y: size * 0.12)
             .accessibilityHidden(true)
     }
 }

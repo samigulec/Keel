@@ -13,7 +13,7 @@ struct ComingSoonView: View {
                 Pill(text: "Faz \(section.phase)")
                 Text("Neler gelecek")
                     .font(.keel(18, .extraBold))
-                    .foregroundStyle(Palette.hull)
+                    .foregroundStyle(Palette.text)
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(plannedFeatures, id: \.self) { feature in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -21,7 +21,7 @@ struct ComingSoonView: View {
                                 .foregroundStyle(Palette.mintText)
                             Text(feature)
                                 .font(.keel(15, .medium))
-                                .foregroundStyle(Palette.hull)
+                                .foregroundStyle(Palette.text)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }

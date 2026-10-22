@@ -92,6 +92,8 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - XcodeGen projesi, `KeelCore` paketi, boş SwiftUI penceresi + kenar çubuğu
 - Tasarım sistemi: renkler (Deep Hull `#0F1A17`, Keel Green `#2FBF8F`,
   Mist `#F3F5F4`, Slate `#56635E`), Manrope + JetBrains Mono, logo
+  (Ekim 2026: tasarım koyu temaya geçti: lacivert `#071423` zemin, cam
+  kartlar, nane-camgöbeği geçişler ve bölüm karakterleri)
 - `SafetyPolicy` ve testleri **ilk yazılan kod** olur
 - GitHub Actions: macOS runner'da build + test
 
