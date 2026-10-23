@@ -25,7 +25,9 @@ struct ApplicationsView: View {
             }
 
             switch model.phase {
-            case .idle, .scanning where model.apps.isEmpty:
+            case .idle:
+                ScanningApps()
+            case .scanning where model.apps.isEmpty:
                 ScanningApps()
             default:
                 SummaryTiles()

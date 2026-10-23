@@ -297,7 +297,7 @@ enum KeelContext {
         if !performance.launchItemsLoaded {
             await performance.refreshLaunchItems()
         }
-        let apps = await step("get_installed_apps") {
+        let installed = await step("get_installed_apps") {
             KeelTools.installedApps(await applications.listWhenReady(), compact: true)
         }
 
@@ -306,7 +306,7 @@ enum KeelContext {
             "cleanable_space": cleanable,
             "top_memory_apps": apps,
             "background_services": KeelTools.backgroundServices(performance, compact: true),
-            "installed_apps": apps,
+            "installed_apps": installed,
         ]
     }
 
