@@ -1,12 +1,12 @@
 import SwiftUI
 
 /// The little helpers from the design, one per section: Kee (Akıllı Tarama),
-/// Puf (Temizlik), Zip (Performans), Blok (Uygulamalar), Kutu (Büyük
-/// Dosyalar) and Bilge (Keel AI).
+/// Puf (Temizlik), Zip (Performans), Roket (Optimizasyon), Blok
+/// (Uygulamalar), Kutu (Büyük Dosyalar) and Bilge (Keel AI).
 /// Drawn on the design's 64×64 grid so they stay sharp at any size.
 struct Mascot: View {
     enum Character {
-        case kee, puf, zip, blok, kutu, bilge
+        case kee, puf, zip, roket, blok, kutu, bilge
     }
 
     let character: Character
@@ -19,6 +19,7 @@ struct Mascot: View {
             case .kee: Self.drawKee(in: &context)
             case .puf: Self.drawPuf(in: &context)
             case .zip: Self.drawZip(in: &context)
+            case .roket: Self.drawRoket(in: &context)
             case .blok: Self.drawBlok(in: &context)
             case .kutu: Self.drawKutu(in: &context)
             case .bilge: Self.drawBilge(in: &context)
@@ -87,6 +88,42 @@ struct Mascot: View {
         highlight(in: &context, center: CGPoint(x: 19, y: 22), radii: CGSize(width: 6, height: 3), degrees: 0)
         var lowered = context
         lowered.translateBy(x: 0, y: 1)
+        face(in: &lowered)
+    }
+
+    /// A small rocket with fins and a flame: lighter and quicker.
+    private static func drawRoket(in context: inout GraphicsContext) {
+        for side in [-1.0, 1.0] {
+            var fin = Path()
+            fin.addLines([
+                CGPoint(x: 32 + side * 15, y: 34), CGPoint(x: 32 + side * 24, y: 52), CGPoint(x: 32 + side * 15, y: 49),
+            ])
+            fin.closeSubpath()
+            context.fill(fin, with: .color(Color(hex: 0xA08BFF)))
+        }
+
+        var flame = Path()
+        flame.move(to: CGPoint(x: 25, y: 52))
+        flame.addQuadCurve(to: CGPoint(x: 32, y: 63), control: CGPoint(x: 25, y: 59))
+        flame.addQuadCurve(to: CGPoint(x: 39, y: 52), control: CGPoint(x: 39, y: 59))
+        flame.closeSubpath()
+        context.fill(flame, with: gradient(0xFFE08A, 0xF0782F, in: flame.boundingRect))
+
+        var body = Path()
+        body.move(to: CGPoint(x: 32, y: 5))
+        body.addCurve(to: CGPoint(x: 49, y: 34), control1: CGPoint(x: 43, y: 12), control2: CGPoint(x: 49, y: 23))
+        body.addLine(to: CGPoint(x: 49, y: 47))
+        body.addQuadCurve(to: CGPoint(x: 15, y: 47), control: CGPoint(x: 32, y: 56))
+        body.addLine(to: CGPoint(x: 15, y: 34))
+        body.addCurve(to: CGPoint(x: 32, y: 5), control1: CGPoint(x: 15, y: 23), control2: CGPoint(x: 21, y: 12))
+        body.closeSubpath()
+        context.fill(body, with: gradient(0x9DF5C8, 0x2FB6A0, in: CGRect(x: 15, y: 5, width: 34, height: 47)))
+        // A porthole above the face.
+        context.fill(Path(ellipseIn: CGRect(x: 27, y: 14, width: 10, height: 10)), with: .color(Color(hex: 0xEAFBFF)))
+        context.stroke(Path(ellipseIn: CGRect(x: 27, y: 14, width: 10, height: 10)), with: .color(Color(hex: 0x2FB6A0)), lineWidth: 2)
+        highlight(in: &context, center: CGPoint(x: 22, y: 28), radii: CGSize(width: 3, height: 6), degrees: 10)
+        var lowered = context
+        lowered.translateBy(x: 0, y: 2)
         face(in: &lowered)
     }
 
@@ -175,6 +212,7 @@ extension AppSection {
         case .smartScan: .kee
         case .cleanup: .puf
         case .performance: .zip
+        case .optimization: .roket
         case .applications: .blok
         case .largeFiles: .kutu
         case .assistant: .bilge

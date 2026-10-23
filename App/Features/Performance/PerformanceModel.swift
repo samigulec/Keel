@@ -9,8 +9,8 @@ struct AppMemoryUsage: Identifiable {
     let footprintBytes: UInt64
 }
 
-/// The per-app memory list and the startup items, refreshed only while
-/// the Performance screen is visible.
+/// Per-process CPU for Performans; per-app memory, startup items and fans
+/// for Optimizasyon and Keel AI. Lists refresh only while their screen is visible.
 @MainActor
 @Observable
 final class PerformanceModel {
@@ -48,6 +48,15 @@ final class PerformanceModel {
             .sorted { $0.footprintBytes > $1.footprintBytes }
             .prefix(Self.topAppCount)
             .map { $0 }
+    }
+
+    /// Asks the app to quit, as if the user chose Quit from its menu.
+    func quit(_ app: AppMemoryUsage) {
+        NSRunningApplication(processIdentifier: app.id)?.terminate()
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            await refreshApps()
+        }
     }
 
     func refreshProcesses() async {

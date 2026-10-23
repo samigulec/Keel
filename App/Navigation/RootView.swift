@@ -91,6 +91,8 @@ struct RootView: View {
             CleanupView()
         case .performance:
             PerformanceView()
+        case .optimization:
+            OptimizationView()
         case .applications:
             ApplicationsView()
         case .largeFiles:

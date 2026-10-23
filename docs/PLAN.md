@@ -128,6 +128,8 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
       M3/M4: `Ftst` kilidi, M1/M2: `F0Md`, Intel: `FS! `); hata olursa
       bütün fanlar otomatiğe döner. Kalıcı yardımcı (SMAppService daemon)
       Developer ID imzasıyla Faz 4'te
+- [x] Optimizasyon bölümü: yoğun uygulamalar (Kapat), girişte açılanlar ve
+      arka plan servisleri tek yerde; Performans yalnızca canlı ölçümler ve fanlar
 - [x] Keel AI eylem kartları: servis/giriş öğesi kapatma, uygulama
       kapatma, fan ayarı; kullanıcı onaylamadan hiçbir şey değişmez
 - Kullanıcı LaunchAgent'larını aç/kapat

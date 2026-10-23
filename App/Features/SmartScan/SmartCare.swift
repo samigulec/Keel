@@ -120,14 +120,14 @@ enum CareReport {
                 findings.append(CareFinding(
                     id: "memory", title: "Bellek baskısı kritik",
                     detail: "Mac belleği diske taşımak zorunda kalıyor; bu her şeyi yavaşlatır. En çok bellek kullananları kapatmayı dene.",
-                    severity: .warning, mascot: .zip, action: .open(.performance), actionTitle: "Performansa git"
+                    severity: .warning, mascot: .zip, action: .open(.optimization), actionTitle: "Yoğun uygulamalara bak"
                 ))
             case .warning:
                 score -= 8
                 findings.append(CareFinding(
                     id: "memory", title: "Bellek baskısı yüksek",
                     detail: "Çok sayıda uygulama ya da sekme açık olabilir.",
-                    severity: .attention, mascot: .zip, action: .open(.performance), actionTitle: "Performansa git"
+                    severity: .attention, mascot: .zip, action: .open(.optimization), actionTitle: "Yoğun uygulamalara bak"
                 ))
             case .normal:
                 findings.append(CareFinding(
@@ -164,7 +164,7 @@ enum CareReport {
             findings.append(CareFinding(
                 id: "startup", title: "\(inputs.startupItems) servis kendiliğinden başlıyor",
                 detail: "Çok sayıda arka plan servisi açılışı ve pili etkileyebilir.",
-                severity: .info, mascot: .zip, action: .open(.performance), actionTitle: "Servislere bak"
+                severity: .info, mascot: .roket, action: .open(.optimization), actionTitle: "Servislere bak"
             ))
         }
 

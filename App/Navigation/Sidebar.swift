@@ -6,7 +6,7 @@ struct Sidebar: View {
     @Environment(SystemStatus.self) private var status
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 10) {
                 KeelLogoTile()
                 Text("Keel")
@@ -16,7 +16,7 @@ struct Sidebar: View {
             }
             .padding(.horizontal, 10)
 
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 ForEach(AppSection.allCases) { section in
                     SidebarItem(section: section, isSelected: section == selection) {
                         selection = section

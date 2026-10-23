@@ -142,6 +142,8 @@ enum CompanionContext {
                 return ["\(app.name) uygulamasını kaldırmalı mıyım?", "\(app.name) neden bu kadar yer kaplıyor?", "Hangi uygulamaları kaldırabilirim?"]
             }
             return ["Hangi uygulamaları kaldırabilirim?", "Hangi uygulamalar Intel, sorun olur mu?", "En çok yer kaplayan uygulamalar hangileri?"]
+        case .optimization:
+            return ["Açılışta neleri kapatabilirim?", "Hangi uygulamadan çıkmalıyım?", "Bu servisler ne işe yarıyor?"]
         case .largeFiles:
             return ["Bu dosyalardan hangilerini silebilirim?", "İndirilenler klasörümü nasıl toparlarım?", "Disk görüntüleri (.dmg) silinebilir mi?"]
         case .assistant:

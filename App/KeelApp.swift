@@ -44,7 +44,7 @@ struct KeelApp: App {
                 .environment(smartCare)
                 .environment(assistant)
                 .environment(navigation)
-                .frame(minWidth: 980, minHeight: 640)
+                .frame(minWidth: 980, minHeight: 660)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 820)
