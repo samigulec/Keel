@@ -9,7 +9,9 @@ struct SettingsView: View {
     @AppStorage(Preference.menuBarVisible) private var menuBarVisible = true
     @AppStorage(Preference.companionButtonVisible) private var companionButtonVisible = true
     @AppStorage(Preference.saveChatHistory) private var saveChatHistory = true
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    /// Read in the background: asking launchd can take a while, and this view
+    /// is built at launch even before the window opens.
+    @State private var launchAtLogin = false
     @State private var loginMessage: String?
     @State private var confirmingDelete = false
 
@@ -74,6 +76,7 @@ struct SettingsView: View {
         .background(Palette.raised)
         .preferredColorScheme(.dark)
         .tint(Palette.keelGreen)
+        .task { launchAtLogin = await Self.loginItemStatus() == .enabled }
         .confirmationDialog("Tüm sohbet geçmişi silinsin mi?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Sil", role: .destructive) { assistant.deleteAllChats() }
             Button("Vazgeç", role: .cancel) {}
@@ -82,19 +85,34 @@ struct SettingsView: View {
         }
     }
 
+    private static func loginItemStatus() async -> SMAppService.Status {
+        await Task.detached(priority: .utility) { SMAppService.mainApp.status }.value
+    }
+
     private func setLaunchAtLogin(_ on: Bool) {
-        do {
-            if on {
-                try SMAppService.mainApp.register()
+        launchAtLogin = on
+        Task {
+            let error: String? = await Task.detached(priority: .userInitiated) {
+                do {
+                    if on {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try SMAppService.mainApp.unregister()
+                    }
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            let status = await Self.loginItemStatus()
+            if let error {
+                loginMessage = "Ayarlanamadı: \(error). Keel'i Uygulamalar klasörüne taşıyıp tekrar dene."
+            } else if status == .requiresApproval {
+                loginMessage = "macOS onay istiyor: Sistem Ayarları > Genel > Giriş Öğeleri'nden Keel'e izin ver."
             } else {
-                try SMAppService.mainApp.unregister()
+                loginMessage = nil
             }
-            loginMessage = SMAppService.mainApp.status == .requiresApproval
-                ? "macOS onay istiyor: Sistem Ayarları > Genel > Giriş Öğeleri'nden Keel'e izin ver."
-                : nil
-        } catch {
-            loginMessage = "Ayarlanamadı: \(error.localizedDescription). Keel'i Uygulamalar klasörüne taşıyıp tekrar dene."
+            launchAtLogin = status == .enabled
         }
-        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

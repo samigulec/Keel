@@ -49,6 +49,7 @@ final class SystemStatus {
     @ObservationIgnored private var lastCoreTicks: [CPUTicks] = []
     @ObservationIgnored private var lastDiskSample: (totals: DiskIOTotals, time: ContinuousClock.Instant)?
     @ObservationIgnored private var lastNetworkSample: (totals: NetworkTotals, time: ContinuousClock.Instant)?
+    @ObservationIgnored private var thermalsBusy = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init() {
@@ -123,7 +124,23 @@ final class SystemStatus {
     }
 
     private func sampleThermals() async {
-        guard let snapshot = await Task.detached(priority: .utility, operation: { SensorReader.snapshot() }).value else { return }
+        // A sensor that does not answer must not stall the other readings:
+        // stop waiting after three seconds; a reading still running keeps
+        // the next one from starting until it ends.
+        guard !thermalsBusy else { return }
+        thermalsBusy = true
+        let snapshot: ThermalSnapshot? = await withCheckedContinuation { continuation in
+            let answer = FirstAnswer(continuation)
+            Task.detached(priority: .utility) { [weak self] in
+                answer.resume(SensorReader.snapshot())
+                await MainActor.run { self?.thermalsBusy = false }
+            }
+            Task.detached {
+                try? await Task.sleep(for: .seconds(3))
+                answer.resume(nil)
+            }
+        }
+        guard let snapshot else { return }
         thermals = snapshot
         if let cpu = snapshot.summary(.cpu) ?? snapshot.summaries.first {
             cpuTemperatureHistory = Self.appending(cpu.hottest, to: cpuTemperatureHistory)
@@ -147,5 +164,23 @@ final class SystemStatus {
 
     private static func appending(_ value: Double, to history: [Double]) -> [Double] {
         Array((history + [value]).suffix(historyLength))
+    }
+}
+
+/// Resumes a continuation with whichever value arrives first; later ones are dropped.
+private final class FirstAnswer<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value, Never>?
+
+    init(_ continuation: CheckedContinuation<Value, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: Value) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
     }
 }
