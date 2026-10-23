@@ -17,6 +17,8 @@ final class CleanupModel {
     private(set) var results: [CategoryScanResult] = []
     private(set) var lastScan: Date?
     private(set) var lastReport: CleanupReport?
+    /// What the last undo put back.
+    private(set) var lastRestore: RestoreReport?
     private(set) var errorMessage: String?
     var selection: Set<CleanupCategoryID> = []
     /// Bundle ID → app name for apps that were running during the last scan.
@@ -88,6 +90,7 @@ final class CleanupModel {
         phase = .scanning
         errorMessage = nil
         lastReport = nil
+        lastRestore = nil
 
         refreshRunningApps()
         let context = ScanContext(runningBundleIDs: Set(runningAppNames.keys))
@@ -146,6 +149,14 @@ final class CleanupModel {
         phase = .ready
         status.refresh()
         return report
+    }
+
+    /// Puts the last cleanup's trashed items back and scans again.
+    func undoLastCleanup() async {
+        guard phase == .ready, let trashed = lastReport?.trashed, !trashed.isEmpty else { return }
+        let report = await Undo.restore(trashed)
+        scan()
+        lastRestore = report
     }
 
     private func refreshRunningApps() {

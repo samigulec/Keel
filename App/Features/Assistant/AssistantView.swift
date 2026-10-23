@@ -341,10 +341,25 @@ private struct ProposalCard: View {
                 Label("Hiçbir şey temizlenmedi; nedeni aşağıda.", systemImage: "exclamationmark.circle.fill")
                     .font(.keel(14, .bold))
                     .foregroundStyle(Palette.warningText)
-            } else if let freedBytes {
-                Label("\(ByteFormat.string(freedBytes)) temizlendi", systemImage: "checkmark.circle.fill")
+            } else if model.undoneProposals.contains(proposal.id) {
+                Label("Geri alındı; öğeler eski yerlerinde", systemImage: "arrow.uturn.backward.circle.fill")
                     .font(.keel(14, .bold))
-                    .foregroundStyle(Palette.mintText)
+                    .foregroundStyle(Palette.slate)
+            } else if let freedBytes {
+                HStack(spacing: 12) {
+                    Label("\(ByteFormat.string(freedBytes)) temizlendi", systemImage: "checkmark.circle.fill")
+                        .font(.keel(14, .bold))
+                        .foregroundStyle(Palette.mintText)
+                    Spacer(minLength: 8)
+                    if model.undoableProposals[proposal.id] != nil {
+                        Button {
+                            model.undoProposal(proposal.id)
+                        } label: {
+                            Label("Geri al", systemImage: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(TileButtonStyle())
+                    }
+                }
             } else {
                 HStack(spacing: 12) {
                     Button("Seçilenleri temizle (\(selected.count))") {

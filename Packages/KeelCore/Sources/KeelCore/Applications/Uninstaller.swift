@@ -33,6 +33,8 @@ public struct UninstallReport: Sendable {
     public var failed: [Outcome] = []
     /// Apps whose bundle went to the Trash.
     public var removedApps: [InstalledApp] = []
+    /// Where trashed items landed, for undo.
+    public var trashed: [TrashedItem] = []
 
     public init() {}
 }
@@ -149,7 +151,9 @@ public struct Uninstaller: Sendable {
                     continue
                 }
                 do {
-                    try remover.moveToTrash(target.url)
+                    if let landed = try remover.moveToTrash(target.url) {
+                        report.trashed.append(TrashedItem(original: target.url, inTrash: landed, bytes: target.bytes))
+                    }
                     report.removed.append(target.url)
                     report.freedBytes += target.bytes
                     record(.removed)

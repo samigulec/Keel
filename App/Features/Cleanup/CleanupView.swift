@@ -26,7 +26,16 @@ struct CleanupView: View {
                 FullDiskAccessBanner { hasFullDiskAccess = FullDiskAccess.isGranted }
             }
             if let report = model.lastReport {
-                ReportBanner(report: report)
+                ReportBanner(report: report) {
+                    Task { await model.undoLastCleanup() }
+                }
+            }
+            if let restore = model.lastRestore {
+                Label(Undo.summary(restore), systemImage: restore.failed.isEmpty ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.keel(14, .semibold))
+                    .foregroundStyle(restore.failed.isEmpty ? Palette.mintText : Palette.warningText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .keelCard(padding: 16, radius: 16)
             }
             if let message = model.errorMessage {
                 Text("Tarama tamamlanamadı: \(message)")
@@ -390,6 +399,7 @@ private struct FullDiskAccessBanner: View {
 
 private struct ReportBanner: View {
     let report: CleanupReport
+    let undo: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -405,6 +415,13 @@ private struct ReportBanner: View {
                     .foregroundStyle(Palette.slate)
             }
             Spacer()
+            if !report.trashed.isEmpty {
+                Button(action: undo) {
+                    Label("Geri al", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(TileButtonStyle())
+                .help("Çöp Kutusu'na taşınanları eski yerlerine koyar")
+            }
         }
         .keelCard(padding: 18, radius: 16, fill: Palette.mint)
     }

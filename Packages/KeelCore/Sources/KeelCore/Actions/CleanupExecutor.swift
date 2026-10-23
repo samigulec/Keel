@@ -9,6 +9,8 @@ public struct CleanupReport: Sendable {
     public var removed: [CleanupItem] = []
     public var skipped: [SkippedItem] = []
     public var failed: [Failure] = []
+    /// Where trashed items landed, for undo.
+    public var trashed: [TrashedItem] = []
 
     public var freedBytes: Int64 { removed.reduce(0) { $0 + $1.sizeBytes } }
 }
@@ -78,7 +80,10 @@ public struct CleanupExecutor: Sendable {
 
             do {
                 switch item.removal {
-                case .moveToTrash: try remover.moveToTrash(item.url)
+                case .moveToTrash:
+                    if let landed = try remover.moveToTrash(item.url) {
+                        report.trashed.append(TrashedItem(original: item.url, inTrash: landed, bytes: item.sizeBytes))
+                    }
                 case .deletePermanently: try remover.deletePermanently(item.url)
                 }
                 report.removed.append(item)

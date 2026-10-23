@@ -22,7 +22,16 @@ struct ApplicationsView: View {
             }
 
             if let report = model.lastReport {
-                UninstallBanner(report: report, dismiss: model.dismissReport)
+                UninstallBanner(report: report, dismiss: model.dismissReport) {
+                    Task { await model.undoLastRemoval() }
+                }
+            }
+            if let restore = model.lastRestore {
+                Label(Undo.summary(restore), systemImage: restore.failed.isEmpty ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.keel(14, .semibold))
+                    .foregroundStyle(restore.failed.isEmpty ? Palette.mintText : Palette.warningText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .keelCard(padding: 16, radius: 16)
             }
 
             switch model.phase {
@@ -596,6 +605,7 @@ private struct ScanningApps: View {
 private struct UninstallBanner: View {
     let report: UninstallReport
     let dismiss: () -> Void
+    let undo: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -612,6 +622,13 @@ private struct UninstallBanner: View {
                 }
             }
             Spacer()
+            if !report.trashed.isEmpty {
+                Button(action: undo) {
+                    Label("Geri al", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(TileButtonStyle())
+                .help("Uygulamayı ve dosyalarını eski yerlerine koyar")
+            }
             Button("Kapat", action: dismiss)
                 .buttonStyle(.plain)
                 .font(.keel(13, .bold))

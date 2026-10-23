@@ -49,10 +49,14 @@ final class RecordingRemover: FileRemover, @unchecked Sendable {
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
     }
 
-    func moveToTrash(_ url: URL) throws {
+    @discardableResult
+    func moveToTrash(_ url: URL) throws -> URL? {
         if failingNames.contains(url.lastPathComponent) { throw CocoaError(.fileWriteNoPermission) }
-        try FileManager.default.moveItem(at: url, to: bin.appendingPathComponent(UUID().uuidString))
+        let landed = bin.appendingPathComponent(UUID().uuidString).appendingPathComponent(url.lastPathComponent)
+        try FileManager.default.createDirectory(at: landed.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: url, to: landed)
         trashed.append(url)
+        return landed
     }
 
     func deletePermanently(_ url: URL) throws {

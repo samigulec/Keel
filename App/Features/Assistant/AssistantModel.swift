@@ -56,6 +56,9 @@ final class AssistantModel {
     private(set) var isRunning = false
     /// Proposals the user applied, with what was freed.
     private(set) var appliedProposals: [UUID: Int64] = [:]
+    /// Where each applied suggestion's items went, so the card can undo it.
+    private(set) var undoableProposals: [UUID: [TrashedItem]] = [:]
+    private(set) var undoneProposals: Set<UUID> = []
     private(set) var stats = ChatStats()
     var draft = ""
     /// The screen the user is on when they write from the companion panel;
@@ -300,6 +303,17 @@ final class AssistantModel {
         pendingCleanup = (proposal, items)
     }
 
+    /// Puts a suggestion's cleaned items back from the Trash.
+    func undoProposal(_ id: UUID) {
+        guard let trashed = undoableProposals.removeValue(forKey: id) else { return }
+        Task {
+            let report = await Undo.restore(trashed)
+            undoneProposals.insert(id)
+            items.append(ChatItem(kind: .notice(isError: !report.failed.isEmpty), text: Undo.summary(report)))
+            cleanup.scan()
+        }
+    }
+
     func cancelPendingCleanup() {
         pendingCleanup = nil
     }
@@ -327,6 +341,7 @@ final class AssistantModel {
             return
         }
         appliedProposals[proposal.id] = report.freedBytes
+        if !report.trashed.isEmpty { undoableProposals[proposal.id] = report.trashed }
 
         var lines: [String] = []
         for skipped in report.skipped {

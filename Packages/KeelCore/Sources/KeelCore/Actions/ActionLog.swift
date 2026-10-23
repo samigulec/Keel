@@ -8,6 +8,8 @@ public struct ActionLog: Sendable {
             case removed
             case skipped
             case failed
+            /// Put back from the Trash with Keel's undo.
+            case restored
         }
 
         public let date: Date

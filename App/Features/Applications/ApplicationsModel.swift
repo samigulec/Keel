@@ -62,6 +62,8 @@ final class ApplicationsModel {
     private(set) var apps: [AppEntry] = []
     private(set) var runningBundleIDs: Set<String> = []
     private(set) var lastReport: UninstallReport?
+    /// What the last undo put back.
+    private(set) var lastRestore: RestoreReport?
     /// Related files per app id, found when the app is first looked at.
     private(set) var related: [String: [RelatedFile]] = [:]
     private(set) var loadingRelated: Set<String> = []
@@ -255,8 +257,18 @@ final class ApplicationsModel {
         status.refresh()
     }
 
+    /// Puts the last removal's app and files back and lists the apps again.
+    func undoLastRemoval() async {
+        guard phase == .ready, let trashed = lastReport?.trashed, !trashed.isEmpty else { return }
+        let report = await Undo.restore(trashed)
+        lastReport = nil
+        lastRestore = report
+        scan()
+    }
+
     func dismissReport() {
         lastReport = nil
+        lastRestore = nil
     }
 
     /// Asks the app to quit, as if the user chose Quit from its menu.
@@ -287,11 +299,14 @@ enum AppUsage {
 /// Moves to the Trash like Finder. Apps installed by a package belong to the
 /// system; for those, Finder's own route asks for an administrator password.
 struct AppRemover: FileRemover {
-    func moveToTrash(_ url: URL) throws {
+    @discardableResult
+    func moveToTrash(_ url: URL) throws -> URL? {
         do {
-            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            var landed: NSURL?
+            try FileManager.default.trashItem(at: url, resultingItemURL: &landed)
+            return landed as URL?
         } catch _ where url.pathExtension.lowercased() == "app" {
-            try Self.recycleWithFinder(url)
+            return try Self.recycleWithFinder(url)
         }
     }
 
@@ -300,15 +315,17 @@ struct AppRemover: FileRemover {
         throw CocoaError(.featureUnsupported)
     }
 
-    private static func recycleWithFinder(_ url: URL) throws {
+    private static func recycleWithFinder(_ url: URL) throws -> URL? {
         final class Outcome: @unchecked Sendable {
             var error: (any Error)?
+            var landed: URL?
         }
         let outcome = Outcome()
         let done = DispatchSemaphore(value: 0)
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                NSWorkspace.shared.recycle([url]) { _, error in
+                NSWorkspace.shared.recycle([url]) { moved, error in
+                    outcome.landed = moved[url]
                     outcome.error = error
                     done.signal()
                 }
@@ -319,5 +336,6 @@ struct AppRemover: FileRemover {
             throw CocoaError(.userCancelled)
         }
         if let error = outcome.error { throw error }
+        return outcome.landed
     }
 }
