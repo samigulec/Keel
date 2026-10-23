@@ -115,7 +115,11 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - Sahipsiz artıklar (kaldırılmış uygulamalardan kalanlar), uygulama güncelleyici
 - [x] Sensörler: sıcaklık (HID / SMC) ve fanlar (SMC), salt okunur
 - Menü çubuğunda canlı grafikler
-- Büyük ve eski dosyalar bulucu, kopya dosyalar
+- [x] Büyük ve eski dosyalar bulucu; kopya dosyalar sonra
+- [x] Geri al (temizlik, uygulama kaldırma, büyük dosyalar)
+- [x] Akıllı Tarama: tek tıkla bakım, sağlık puanı ve bulgular
+- [x] Keel AI sohbet geçmişi, her ekranda yol arkadaşı paneli
+- [x] Ayarlar (⌘,), oturum açılışında başlatma, ⌘1–⌘6 kısayolları
 - Kullanıcı LaunchAgent'larını aç/kapat
 
 ### Faz 3 — Yönetici yetkisi gerektirenler

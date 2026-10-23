@@ -25,6 +25,25 @@ struct CompanionPanel: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
+                if !model.history.isEmpty {
+                    Menu {
+                        ForEach(model.history.prefix(10)) { chat in
+                            Button(chat.title) { model.open(chat) }
+                        }
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Palette.subtle)
+                            .frame(width: 32, height: 32)
+                            .background(Palette.mist, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .disabled(model.isRunning)
+                    .help("Geçmiş sohbetler")
+                    .accessibilityLabel("Geçmiş sohbetler")
+                }
                 iconButton("plus.bubble", help: "Yeni sohbet") { model.startNewChat() }
                     .disabled(model.items.isEmpty)
                 iconButton("arrow.up.left.and.arrow.down.right", help: "Keel AI sekmesinde aç", action: openFull)

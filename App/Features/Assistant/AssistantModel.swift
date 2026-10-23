@@ -65,6 +65,15 @@ final class AssistantModel {
     /// nil on the Keel AI tab itself.
     @ObservationIgnored var screen: ScreenContext?
 
+    /// Earlier conversations, newest first.
+    private(set) var history: [SavedChat] = ChatStore.list()
+    /// The saved conversation the chat belongs to, once it has a message.
+    private(set) var savedChatID: UUID?
+    @ObservationIgnored private var savedChatCreated = Date()
+    /// A reopened conversation's earlier messages, sent once with the next
+    /// message because the model did not see them.
+    @ObservationIgnored private var restoredTranscript: String?
+
     static let suggestions = [
         "Bilgisayarım neden yavaş?",
         "Neleri güvenle silebilirim?",
@@ -125,6 +134,8 @@ final class AssistantModel {
         runTask?.cancel()
         chatID = UUID()
         session = nil
+        savedChatID = nil
+        restoredTranscript = nil
         items = []
         appliedProposals = [:]
         stats = ChatStats()
@@ -158,7 +169,11 @@ final class AssistantModel {
         items.append(ChatItem(kind: .user, text: message))
         isRunning = true
         let chat = chatID
-        let prompt = screen.map { "\($0.note)\n\n\(message)" } ?? message
+        var prompt = screen.map { "\($0.note)\n\n\(message)" } ?? message
+        if let transcript = restoredTranscript {
+            prompt = "<previous_conversation>\n\(transcript)\n</previous_conversation>\n\n" + prompt
+            restoredTranscript = nil
+        }
         runTask = Task {
             do {
                 let session = try await currentSession()
@@ -180,6 +195,7 @@ final class AssistantModel {
             guard chatID == chat else { return }
             finishOpenItems()
             isRunning = false
+            persist()
         }
     }
 
@@ -294,6 +310,64 @@ final class AssistantModel {
         }
     }
 
+    // MARK: History
+
+    /// Saves the conversation's words; tool runs and cards are left out.
+    private func persist() {
+        // The user can turn history off in Settings.
+        guard UserDefaults.standard.object(forKey: Preference.saveChatHistory) as? Bool ?? true else { return }
+        let messages: [SavedChat.Message] = items.compactMap { item -> SavedChat.Message? in
+            switch item.kind {
+            case .user: SavedChat.Message(role: .user, text: item.text)
+            case .assistant where !item.text.isEmpty: SavedChat.Message(role: .assistant, text: item.text)
+            case .notice: SavedChat.Message(role: .notice, text: item.text)
+            default: nil
+            }
+        }
+        guard let first = messages.first(where: { $0.role == .user }) else { return }
+        if savedChatID == nil {
+            savedChatID = UUID()
+            savedChatCreated = Date()
+        }
+        let chat = SavedChat(
+            id: savedChatID!, title: ChatStore.title(for: first.text),
+            createdAt: savedChatCreated, updatedAt: Date(), messages: messages
+        )
+        ChatStore.save(chat)
+        history = ChatStore.list()
+    }
+
+    /// Shows an earlier conversation; writing on continues it.
+    func open(_ chat: SavedChat) {
+        guard !isRunning else { return }
+        startNewChat()
+        items = chat.messages.map { message in
+            let kind: ChatItem.Kind = switch message.role {
+            case .user: .user
+            case .assistant: .assistant
+            case .notice: .notice(isError: false)
+            }
+            var item = ChatItem(kind: kind, text: message.text)
+            item.isFinished = true
+            return item
+        }
+        savedChatID = chat.id
+        savedChatCreated = chat.createdAt
+        restoredTranscript = ChatStore.transcript(chat.messages)
+    }
+
+    func deleteAllChats() {
+        for chat in history { ChatStore.delete(chat.id) }
+        history = []
+        savedChatID = nil
+    }
+
+    func deleteChat(_ id: UUID) {
+        ChatStore.delete(id)
+        history = ChatStore.list()
+        if savedChatID == id { startNewChat() }
+    }
+
     private func finishOpenItems() {
         for index in items.indices where !items[index].isFinished {
             switch items[index].kind {
@@ -393,6 +467,7 @@ final class AssistantModel {
     - Answer in the language the user writes in.
     - Privacy: you only receive the summaries Keel's tools return (sizes, app and folder names, readings). You never see file contents.
     - A message may start with <keel_screen>: the Keel screen the user is on and what they selected there. Use it to understand what "this" or "bu" refers to; do not repeat the tag.
+    - A message may start with <previous_conversation>: an earlier conversation the user reopened. Continue from it naturally; the readings in it may be out of date, so check again before quoting numbers.
     """
 
     /// The on-device model has a small context window; ask for short answers.

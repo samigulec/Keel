@@ -10,6 +10,8 @@ struct KeelApp: App {
     @State private var applications: ApplicationsModel
     @State private var largeFiles: LargeFilesModel
     @State private var smartCare: SmartCareModel
+    @State private var navigation = AppNavigation()
+    @AppStorage(Preference.menuBarVisible) private var menuBarVisible = true
     @State private var assistant: AssistantModel
 
     init() {
@@ -41,12 +43,26 @@ struct KeelApp: App {
                 .environment(largeFiles)
                 .environment(smartCare)
                 .environment(assistant)
+                .environment(navigation)
                 .frame(minWidth: 980, minHeight: 640)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 820)
+        .commands {
+            CommandMenu("Git") {
+                ForEach(Array(AppSection.allCases.enumerated()), id: \.element) { index, section in
+                    Button(section.title) { navigation.selection = section }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                }
+            }
+        }
 
-        MenuBarExtra("Keel", systemImage: "gauge.with.dots.needle.33percent") {
+        Settings {
+            SettingsView()
+                .environment(assistant)
+        }
+
+        MenuBarExtra("Keel", systemImage: "gauge.with.dots.needle.33percent", isInserted: $menuBarVisible) {
             MenuBarContent()
                 .environment(status)
         }

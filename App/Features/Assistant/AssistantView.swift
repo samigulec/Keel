@@ -76,9 +76,6 @@ private struct Aside: View {
                 Text("AI modelleri").eyebrowStyle()
                 ProvidersPanel()
 
-                PrivacyNote(isLocal: model.connection?.isLocal == true)
-                    .padding(.top, 6)
-
                 Button {
                     model.startNewChat()
                 } label: {
@@ -87,9 +84,62 @@ private struct Aside: View {
                 }
                 .buttonStyle(.keelSecondary)
                 .disabled(model.items.isEmpty)
+                .padding(.top, 6)
+
+                if !model.history.isEmpty {
+                    ChatHistory()
+                }
+
+                PrivacyNote(isLocal: model.connection?.isLocal == true)
+                    .padding(.top, 6)
             }
         }
         .scrollIndicators(.never)
+    }
+}
+
+/// Earlier conversations; a click reopens one.
+private struct ChatHistory: View {
+    @Environment(AssistantModel.self) private var model
+    @State private var showsAll = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Geçmiş sohbetler").eyebrowStyle()
+                .padding(.top, 8)
+            ForEach(showsAll ? model.history : Array(model.history.prefix(6))) { chat in
+                let isCurrent = model.savedChatID == chat.id
+                Button {
+                    model.open(chat)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(chat.title)
+                            .font(.keel(13, isCurrent ? .bold : .semibold))
+                            .foregroundStyle(Palette.text)
+                            .lineLimit(1)
+                        Text(chat.updatedAt.formatted(.relative(presentation: .named)))
+                            .font(.keel(11, .medium))
+                            .foregroundStyle(Palette.slate)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(isCurrent ? Palette.Sidebar.selectedBackground : Palette.mist, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isRunning)
+                .contextMenu {
+                    Button("Sil", role: .destructive) { model.deleteChat(chat.id) }
+                }
+            }
+            if model.history.count > 6 {
+                Button(showsAll ? "Daha az göster" : "Tümünü göster (\(model.history.count))") { showsAll.toggle() }
+                    .buttonStyle(.plain)
+                    .font(.keel(12, .bold))
+                    .foregroundStyle(Palette.mintText)
+            }
+        }
     }
 }
 

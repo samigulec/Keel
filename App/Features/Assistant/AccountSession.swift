@@ -331,6 +331,8 @@ enum KeelContext {
 
     A message may start with <keel_screen>: the Keel screen the user is on and what they selected there. Use it to understand what "this" or "bu" refers to; do not repeat the tag.
 
+    A message may start with <previous_conversation>: an earlier conversation the user reopened. Continue from it naturally; its readings may be out of date, so rely on the fresh <keel_context>.
+
     You cannot remove apps. When the user wants to, point them to Keel's Uygulamalar section, which moves an app and its leftover files to the Trash.
 
     Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners, removing language files from apps, or disabling system services.

@@ -5,18 +5,20 @@ struct RootView: View {
     @Environment(ApplicationsModel.self) private var applications
     @Environment(CleanupModel.self) private var cleanup
     @Environment(LargeFilesModel.self) private var largeFiles
-    @State private var selection: AppSection = .smartScan
+    @Environment(AppNavigation.self) private var navigation
+    @AppStorage(Preference.companionButtonVisible) private var companionButtonVisible = true
     /// Keel AI beside the current screen; remembered between launches.
     @AppStorage("keel.companion.open") private var companionOpen = false
     @State private var contentWidth: CGFloat = 1_000
 
     var body: some View {
+        @Bindable var navigation = navigation
         HStack(spacing: 0) {
-            Sidebar(selection: $selection)
+            Sidebar(selection: $navigation.selection)
                 .frame(width: 244)
 
             Group {
-                if selection == .assistant {
+                if navigation.selection == .assistant {
                     // The chat scrolls its own messages and keeps the input bar in view.
                     AssistantView()
                         .padding(.horizontal, 40)
@@ -34,7 +36,7 @@ struct RootView: View {
                     }
                     .overlay(alignment: .bottomTrailing) {
                         // The open panel has its own close button.
-                        if !companionOpen {
+                        if !companionOpen, companionButtonVisible {
                             CompanionButton(isOpen: false) { toggleCompanion() }
                                 .padding(24)
                         }
@@ -45,13 +47,13 @@ struct RootView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
             .environment(\.compactLayout, contentWidth < 900)
 
-            if companionOpen, selection != .assistant {
+            if companionOpen, navigation.selection != .assistant {
                 CompanionPanel(
-                    section: selection,
-                    suggestions: CompanionContext.suggestions(for: selection, applications: applications, cleanup: cleanup),
+                    section: navigation.selection,
+                    suggestions: CompanionContext.suggestions(for: navigation.selection, applications: applications, cleanup: cleanup),
                     openFull: {
                         companionOpen = false
-                        selection = .assistant
+                        navigation.selection = .assistant
                     },
                     close: { toggleCompanion() }
                 )
@@ -72,8 +74,8 @@ struct RootView: View {
 
     /// What Keel AI should know about the screen; none on its own tab.
     private var screen: ScreenContext? {
-        guard selection != .assistant else { return nil }
-        return CompanionContext.screen(for: selection, applications: applications, cleanup: cleanup, largeFiles: largeFiles)
+        guard navigation.selection != .assistant else { return nil }
+        return CompanionContext.screen(for: navigation.selection, applications: applications, cleanup: cleanup, largeFiles: largeFiles)
     }
 
     private func toggleCompanion() {
@@ -82,9 +84,9 @@ struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection {
+        switch navigation.selection {
         case .smartScan:
-            SmartScanView(navigate: { selection = $0 })
+            SmartScanView(navigate: { navigation.selection = $0 })
         case .cleanup:
             CleanupView()
         case .performance:
@@ -93,8 +95,9 @@ struct RootView: View {
             ApplicationsView()
         case .largeFiles:
             LargeFilesView()
-        default:
-            ComingSoonView(section: selection)
+        case .assistant:
+            // Shown on its own above, outside the scroll view.
+            EmptyView()
         }
     }
 }
