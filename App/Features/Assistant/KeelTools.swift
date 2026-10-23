@@ -30,7 +30,8 @@ enum HomePath {
 }
 
 /// The tools Keel AI may call. They read the Mac's state through the same
-/// models the screens use; none of them changes anything on disk.
+/// models the screens use; none of them changes anything. Changes are only
+/// proposed, as cards the user confirms.
 @MainActor
 enum KeelTools {
     static let displayNames: [String: String] = [
@@ -41,6 +42,7 @@ enum KeelTools {
         "get_installed_apps": "Yüklü uygulamalar",
         "get_large_files": "Büyük dosyalar",
         "propose_cleanup": "Temizlik önerisi",
+        "propose_action": "Öneri",
     ]
 
     /// `compact` trims tool output for models with a small context window,
@@ -52,7 +54,8 @@ enum KeelTools {
         applications: ApplicationsModel,
         largeFiles: LargeFilesModel,
         compact: Bool = false,
-        propose: @escaping @MainActor (CleanupProposal) -> Void
+        propose: @escaping @MainActor (CleanupProposal) -> Void,
+        proposeAction: @escaping @MainActor (ActionProposal) -> Void
     ) -> [AITool] {
         let noInput: JSONValue = ["type": "object", "properties": [:], "additionalProperties": false]
 
@@ -103,11 +106,18 @@ enum KeelTools {
 
             AITool(
                 name: "get_background_services",
-                description: "Lists launchd agents and daemons that start on their own (at login or kept running), with their owner and program path. Call this when the user asks what runs in the background or why startup is slow. Keel cannot turn these off; point the user to System Settings > General > Login Items if they want to.",
+                description: "Lists launchd agents and daemons that start on their own (at login or kept running) with their labels, and the apps that open at login. Call this when the user asks what runs in the background, why startup is slow, or wants something to stop starting on its own. Reading login items the first time may ask the user for permission.",
                 inputSchema: noInput
             ) { _ in
                 await performance.refreshLaunchItems()
-                return backgroundServices(performance, compact: compact).encodedString()
+                let listed = await performance.loginItemsWhenReady()
+                let loginItems: JSONValue = performance.loginItemsLoaded
+                    ? .array(listed.map { .string($0.name) })
+                    : .string(performance.loginItemsError ?? "unavailable")
+                return JSONValue.object([
+                    "services": backgroundServices(performance, compact: compact),
+                    "login_items": loginItems,
+                ]).encodedString()
             },
 
             AITool(
@@ -133,6 +143,27 @@ enum KeelTools {
                 ]
             ) { input in
                 proposal(from: input, cleanup: cleanup, propose: propose).encodedString()
+            },
+
+            AITool(
+                name: "propose_action",
+                description: "Shows the user a card with a button to confirm; nothing changes unless they press it, so never say it was done. Actions: 'disable_startup' / 'enable_startup' with `names` = service labels from get_background_services (Keel refuses macOS's own com.apple.* services; leave security software and VPNs the user relies on alone unless asked); 'remove_login_items' with `names` = login item app names (the apps stay installed); 'quit_apps' with `names` = app names from get_top_memory_apps (apps ask before losing unsaved work); 'set_fans' with `mode` 'auto' or `percent` 50-100 of each fan's top speed (only when the Mac is hot or the user asks; needs the administrator password; stays until auto or a restart).",
+                inputSchema: [
+                    "type": "object",
+                    "properties": [
+                        "action": ["type": "string", "enum": .array(ActionProposals.actions.map(JSONValue.string))],
+                        "names": ["type": "array", "items": ["type": "string"], "description": "Service labels, login item names or app names, depending on the action."],
+                        "mode": ["type": "string", "enum": ["auto"], "description": "set_fans only: back to automatic."],
+                        "percent": ["type": "integer", "minimum": 50, "maximum": 100, "description": "set_fans only: fixed speed as a share of each fan's maximum."],
+                        "reason": ["type": "string", "description": "One sentence for the user on why this helps."],
+                    ],
+                    "required": ["action", "reason"],
+                    "additionalProperties": false,
+                ]
+            ) { input in
+                let (proposal, result) = await ActionProposals.resolve(input, performance: performance)
+                if let proposal { proposeAction(proposal) }
+                return result.encodedString()
             },
         ]
     }
@@ -265,11 +296,13 @@ enum KeelTools {
         return .array(items.map { item in
             var entry: [String: JSONValue] = [
                 "name": .string(item.displayName),
+                // What propose_action takes.
+                "label": .string(item.label),
                 "scope": .string(item.scope.rawValue),
                 "starts": .string(item.isDisabled ? "disabled" : item.keepsAlive ? "always" : item.runsAtLoad ? "at_login" : "on_demand"),
             ]
+            if LaunchControl.refusal(for: item) != nil { entry["keel_can_change"] = false }
             if !compact {
-                entry["label"] = .string(item.label)
                 entry["program"] = item.program.map(JSONValue.string) ?? .null
             }
             return .object(entry)

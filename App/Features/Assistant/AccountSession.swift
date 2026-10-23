@@ -21,6 +21,7 @@ final class AccountSession: ChatSession {
     var effort: String?
     private let gatherContext: @MainActor ((AssistantEvent) -> Void) async -> JSONValue
     private let propose: @MainActor (JSONValue) async -> Void
+    private let proposeAction: @MainActor (JSONValue) async -> Void
     /// Called when Keel moved to another model to get an answer: the new
     /// model (nil for the account's default) and a line for the user.
     private let fellBack: @MainActor (_ model: String?, _ notice: String) -> Void
@@ -32,6 +33,7 @@ final class AccountSession: ChatSession {
         effort: String?,
         gatherContext: @escaping @MainActor ((AssistantEvent) -> Void) async -> JSONValue,
         propose: @escaping @MainActor (JSONValue) async -> Void,
+        proposeAction: @escaping @MainActor (JSONValue) async -> Void,
         fellBack: @escaping @MainActor (_ model: String?, _ notice: String) -> Void
     ) {
         precondition(kind != .apple, "Apple Intelligence runs in-process")
@@ -40,6 +42,7 @@ final class AccountSession: ChatSession {
         self.effort = effort
         self.gatherContext = gatherContext
         self.propose = propose
+        self.proposeAction = proposeAction
         self.fellBack = fellBack
     }
 
@@ -100,10 +103,13 @@ final class AccountSession: ChatSession {
         for proposal in end.proposals {
             await propose(proposal)
         }
+        for action in end.actions {
+            await proposeAction(action)
+        }
         onEvent(.stopped(.endTurn))
     }
 
-    /// Shows a chunk of the answer, minus any cleanup block.
+    /// Shows a chunk of the answer, minus any suggestion block.
     private static func emit(_ chunk: String, filter: inout ProposalStreamFilter, onEvent: (AssistantEvent) -> Void) {
         let visible = filter.feed(chunk)
         if !visible.isEmpty { onEvent(.textDelta(visible)) }
@@ -298,6 +304,10 @@ enum KeelContext {
         if !performance.launchItemsLoaded {
             await performance.refreshLaunchItems()
         }
+        // Reading login items may ask for permission, so only once the user has.
+        let loginItems: JSONValue = performance.loginItemsLoaded
+            ? .array(performance.loginItems.map { .string($0.name) })
+            : .string("not read yet; Keel reads them when you propose remove_login_items")
         // Scanning the home folder is slow; share it only once the user has scanned.
         let bigFiles: JSONValue = largeFiles.phase == .ready
             ? KeelTools.largeFilesSummary(largeFiles.files, compact: true)
@@ -311,6 +321,7 @@ enum KeelContext {
             "cleanable_space": cleanable,
             "top_memory_apps": apps,
             "background_services": KeelTools.backgroundServices(performance, compact: true),
+            "login_items": loginItems,
             "installed_apps": installed,
             "large_files": bigFiles,
         ]
@@ -321,13 +332,24 @@ enum KeelContext {
     static let instructions = """
     You are Keel AI, the assistant inside Keel, a maintenance app for macOS. You help the user understand and improve their Mac: speed, memory, storage, battery, background services and cleanup.
 
-    Every user message starts with <keel_context>: fresh readings Keel took from this Mac just now (system status, cleanable space by category with item paths, apps using the most memory, background services, installed apps with sizes and last use). Answer from that data and quote the numbers; do not guess beyond it. You have no tools and cannot run commands or read files; never try to.
+    Every user message starts with <keel_context>: fresh readings Keel took from this Mac just now (system status, cleanable space by category with item paths, apps using the most memory, background services with their labels, login items, installed apps with sizes and last use). Answer from that data and quote the numbers; do not guess beyond it. You have no tools and cannot run commands or read files; never try to.
 
-    To suggest a cleanup, end your answer with exactly one block in this form, and nothing after it:
+    To suggest a cleanup, end your answer with a block in this form:
     ```keel-cleanup
     {"items": ["~/Library/Caches/Firefox/Profiles"], "categories": [], "reason": "One sentence on why this helps."}
     ```
     When the user names specific things, list them in "items" using the exact paths from the context. For whole categories use "categories" with ids from the context that have items. Either list may be empty. Prefer the preselected ones; include "trash" (deleted permanently) or "oldDownloads" (personal files) only when the user clearly wants that. Keel shows the block as a card and nothing is removed unless the user confirms, so never say something was cleaned.
+
+    Keel can also turn background services and login items off or on, quit apps and set the fans. To suggest one of these, end your answer with a block in this form (one block per action; a cleanup block may come before it):
+    ```keel-action
+    {"action": "disable_startup", "names": ["com.valvesoftware.steam.ipctool"], "reason": "One sentence on why this helps."}
+    ```
+    Actions:
+    - "disable_startup" / "enable_startup": "names" are labels from background_services. Keel refuses macOS's own (com.apple.*) services; do not suggest them. Services that update or protect the Mac (security software, VPNs the user relies on) should stay on unless the user asks.
+    - "remove_login_items": "names" are app names from login_items. The apps stay installed; they just stop opening at login.
+    - "quit_apps": "names" are app names from top_memory_apps. The apps ask before losing unsaved work.
+    - "set_fans": {"action": "set_fans", "mode": "auto"} or {"action": "set_fans", "percent": 80} (50-100, a share of each fan's top speed). Suggest it only when the Mac is hot or the user asks; it needs the administrator password and stays until the user returns to auto or restarts.
+    Keel shows each action as a card and nothing changes unless the user presses its button, so never say it was done.
 
     A message may start with <keel_screen>: the Keel screen the user is on and what they selected there. Use it to understand what "this" or "bu" refers to; do not repeat the tag.
 
@@ -335,7 +357,7 @@ enum KeelContext {
 
     You cannot remove apps. When the user wants to, point them to Keel's Uygulamalar section, which moves an app and its leftover files to the Trash.
 
-    Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners, removing language files from apps, or disabling system services.
+    Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners or removing language files from apps.
 
     Write for someone who is not an expert. Keep answers short, use short bullet lists for steps, and answer in the language the user writes in.
     """

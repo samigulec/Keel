@@ -36,12 +36,15 @@ public struct FanReading: Identifiable, Equatable, Sendable {
     public let rpm: Double
     public let minimumRPM: Double?
     public let maximumRPM: Double?
+    /// True when held at a fixed speed instead of macOS's automatic control.
+    public let isManual: Bool
 
-    public init(index: Int, rpm: Double, minimumRPM: Double?, maximumRPM: Double?) {
+    public init(index: Int, rpm: Double, minimumRPM: Double?, maximumRPM: Double?, isManual: Bool = false) {
         self.index = index
         self.rpm = rpm
         self.minimumRPM = minimumRPM
         self.maximumRPM = maximumRPM
+        self.isManual = isManual
     }
 
     /// How far between its slowest and fastest speed the fan runs, 0...1.
@@ -91,13 +94,15 @@ public enum SensorReader {
             sensors = smcTemperatures(connection)
         }
         let fanCount = connection != 0 ? smcValue(connection, "FNum").map { Int($0) } : nil
+        let manual = fanCount.map { _ in FanModeReader.manualFans() } ?? []
         let fans = (0..<min(fanCount ?? 0, 8)).compactMap { index -> FanReading? in
             guard let rpm = smcValue(connection, "F\(index)Ac") else { return nil }
             return FanReading(
                 index: index,
                 rpm: rpm,
                 minimumRPM: smcValue(connection, "F\(index)Mn"),
-                maximumRPM: smcValue(connection, "F\(index)Mx")
+                maximumRPM: smcValue(connection, "F\(index)Mx"),
+                isManual: manual.contains(index)
             )
         }
         guard !sensors.isEmpty || fanCount != nil else { return nil }

@@ -34,17 +34,24 @@ struct PerformanceView: View {
     private var thermalCard: some View {
         ThermalCard(thermals: status.thermals, cpuHistory: status.cpuTemperatureHistory)
     }
-    private var fansCard: some View { FansCard(thermals: status.thermals) }
+    private var fansCard: some View {
+        FansCard(thermals: status.thermals, busy: model.fanBusy, message: model.fanMessage, applied: model.fanSetting) { setting in
+            Task { await model.setFans(setting) }
+        }
+    }
     private var topAppsCard: some View { TopAppsCard(apps: model.topApps) }
     private var launchItemsCard: some View {
         LaunchItemsCard(
             items: model.launchItems,
             activeCount: model.activeLaunchItems.count,
-            loaded: model.launchItemsLoaded
-        ) {
-            Task { await model.refreshLaunchItems() }
-        }
+            loaded: model.launchItemsLoaded,
+            switching: model.switchingItems,
+            message: model.startupMessage,
+            reload: { Task { await model.refreshLaunchItems() } },
+            toggle: { item, enabled in Task { await model.setLaunchItems([item], enabled: enabled) } }
+        )
     }
+    private var loginItemsCard: some View { LoginItemsCard(model: model) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -89,9 +96,12 @@ struct PerformanceView: View {
             }
 
             if compact {
-                VStack(spacing: 16) { topAppsCard; launchItemsCard }
+                VStack(spacing: 16) { topAppsCard; loginItemsCard; launchItemsCard }
             } else {
-                HStack(alignment: .top, spacing: 16) { topAppsCard; launchItemsCard }
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(spacing: 16) { topAppsCard; loginItemsCard }
+                    launchItemsCard
+                }
             }
         }
         .task {
@@ -621,6 +631,14 @@ private struct ThermalCard: View {
 /// Fan speeds from the SMC; Keel only reads them.
 private struct FansCard: View {
     let thermals: ThermalSnapshot?
+    let busy: Bool
+    let message: String?
+    let applied: FanSetting?
+    let set: @MainActor (FanSetting) -> Void
+
+    /// Fixed speeds offered, as shares of each fan's maximum. Lower ones are
+    /// left out: they would only keep the Mac warmer than macOS would.
+    private static let presets = [60, 80, 100]
 
     var body: some View {
         PanelCard {
@@ -647,10 +665,7 @@ private struct FansCard: View {
                         }
                     }
                 }
-                Text("Apple silicon Mac'lerde fanlar yük artana kadar çoğu zaman durur; bu normaldir.")
-                    .font(.keel(11, .medium))
-                    .foregroundStyle(Palette.slate)
-                    .fixedSize(horizontal: false, vertical: true)
+                controls(thermals.fans)
             } else {
                 Text(thermals == nil ? "Fanlar okunuyor…" : "Bu Mac'te fan yok; sessiz, pasif soğutmayla çalışıyor.")
                     .font(.keel(13, .medium))
@@ -660,8 +675,38 @@ private struct FansCard: View {
         }
     }
 
+    @ViewBuilder
+    private func controls(_ fans: [FanReading]) -> some View {
+        let manual = fans.contains(where: \.isManual)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Button("Otomatik") { set(.automatic) }
+                    .buttonStyle(TileButtonStyle(prominent: !manual))
+                ForEach(Self.presets, id: \.self) { percent in
+                    Button(percent == 100 ? "En yüksek" : "%\(percent)") { set(.fixed(percent: percent)) }
+                        .buttonStyle(TileButtonStyle(prominent: manual && applied == .fixed(percent: percent)))
+                }
+                if busy { ProgressView().controlSize(.small) }
+            }
+            .disabled(busy)
+            if let message {
+                Text(message)
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.subtle)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(manual
+                ? "Fanlar elle ayarlı. Otomatik'e basana ya da Mac yeniden başlayana kadar böyle kalır."
+                : "Apple silicon Mac'lerde fanlar yük artana kadar çoğu zaman durur; bu normaldir. Hızlandırmak yönetici şifresi ister.")
+                .font(.keel(11, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var status: String? {
         guard let fans = thermals?.fans, !fans.isEmpty else { return nil }
+        if fans.contains(where: \.isManual) { return "Elle ayarlı" }
         let spinning = fans.filter { $0.rpm >= 1 }.count
         return spinning == 0 ? "Sessiz" : "\(spinning) fan dönüyor"
     }
@@ -915,7 +960,10 @@ private struct LaunchItemsCard: View {
     let items: [LaunchItem]
     let activeCount: Int
     let loaded: Bool
+    let switching: Set<String>
+    let message: String?
     let reload: @MainActor () -> Void
+    let toggle: @MainActor (LaunchItem, Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -924,6 +972,14 @@ private struct LaunchItemsCard: View {
                     .buttonStyle(.plain)
                     .font(.keel(13, .bold))
                     .foregroundStyle(Palette.mintText)
+            }
+            if let message {
+                Text(message)
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.warningText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 10)
             }
             if !loaded {
                 ProgressView()
@@ -939,18 +995,20 @@ private struct LaunchItemsCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.displayName)
                                 .font(.keel(15, .semibold))
-                                .foregroundStyle(Palette.text)
+                                .foregroundStyle(item.isDisabled ? Palette.slate : Palette.text)
                                 .lineLimit(1)
-                            Text(scopeText(item.scope))
-                                .font(.keel(12, .medium))
-                                .foregroundStyle(Palette.slate)
+                            HStack(spacing: 4) {
+                                if LaunchControl.needsAdministrator(item) {
+                                    Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
+                                }
+                                Text("\(scopeText(item.scope)) · \(stateText(item))")
+                                    .lineLimit(1)
+                            }
+                            .font(.keel(12, .medium))
+                            .foregroundStyle(Palette.slate)
                         }
                         Spacer(minLength: 12)
-                        Pill(
-                            text: stateText(item),
-                            background: item.isDisabled ? Palette.track : Palette.mint,
-                            foreground: item.isDisabled ? Palette.slate : Palette.mintText
-                        )
+                        control(for: item)
                     }
                     .padding(.horizontal, 24)
                     .frame(minHeight: 52)
@@ -958,6 +1016,12 @@ private struct LaunchItemsCard: View {
                     .help(item.program ?? item.url.path)
                 }
             }
+            Text("Kapattığın servis Mac yeniden başlasa da kapalı kalır; anahtarı açınca geri gelir. Kilitli olanlar yönetici şifresi ister.")
+                .font(.keel(11, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+                .padding(.top, 10)
             Button("Uygulamaların açılış ayarları", action: PerformanceModel.openLoginItemsSettings)
                 .buttonStyle(.plain)
                 .font(.keel(13, .bold))
@@ -970,19 +1034,128 @@ private struct LaunchItemsCard: View {
         .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.border) }
     }
 
+    @ViewBuilder
+    private func control(for item: LaunchItem) -> some View {
+        if let refusal = LaunchControl.refusal(for: item) {
+            Pill(text: "macOS", background: Palette.track, foreground: Palette.slate)
+                .help("Keel bunu değiştirmez: \(refusal).")
+        } else if switching.contains(item.id) {
+            ProgressView().controlSize(.small)
+        } else {
+            Toggle("", isOn: Binding(get: { !item.isDisabled }, set: { toggle(item, $0) }))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Palette.keelGreen)
+                .disabled(!switching.isEmpty)
+                .accessibilityLabel("\(item.displayName) \(item.isDisabled ? "kapalı" : "açık")")
+        }
+    }
+
     private func scopeText(_ scope: LaunchItem.Scope) -> String {
         switch scope {
         case .user: "Senin hesabın"
         case .allUsers: "Tüm kullanıcılar"
-        case .system: "Sistem (yönetici)"
+        case .system: "Sistem"
         }
     }
 
     private func stateText(_ item: LaunchItem) -> String {
-        if item.isDisabled { return "Kapalı" }
-        if item.keepsAlive { return "Sürekli" }
-        if item.runsAtLoad { return "Açılışta" }
-        return "Gerektiğinde"
+        if item.isDisabled { return "kapalı" }
+        if item.keepsAlive { return "sürekli çalışır" }
+        if item.runsAtLoad { return "açılışta başlar" }
+        return "gerektiğinde"
+    }
+}
+
+/// Apps that open when the user logs in ("Open at Login").
+private struct LoginItemsCard: View {
+    let model: PerformanceModel
+    /// Reading the list asks once for permission to use System Events.
+    @AppStorage("keel.loginItems.allowed") private var allowed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ListHeader(title: "Oturum açılışında", detail: model.loginItemsLoaded ? "\(model.loginItems.count) uygulama açılıyor" : "") {
+                if model.loginItemsLoaded {
+                    Button("Yenile") { Task { await model.refreshLoginItems() } }
+                        .buttonStyle(.plain)
+                        .font(.keel(13, .bold))
+                        .foregroundStyle(Palette.mintText)
+                }
+            }
+            if let error = model.loginItemsError {
+                Text(error)
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.warningText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 10)
+            }
+            if !model.loginItemsLoaded {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Mac'e giriş yaptığında kendiliğinden açılan uygulamalar. Keel listeyi okumak için bir kez System Events izni ister.")
+                        .font(.keel(13, .medium))
+                        .foregroundStyle(Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Listeyi göster") {
+                        allowed = true
+                        Task { await model.refreshLoginItems() }
+                    }
+                    .buttonStyle(TileButtonStyle(prominent: true))
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+            } else if model.loginItems.isEmpty, model.removedLoginItems.isEmpty {
+                Text("Girişte açılan uygulama yok.")
+                    .font(.keel(14, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+            } else {
+                ForEach(model.loginItems) { item in
+                    row(item.name, detail: item.path.isEmpty ? nil : URL(fileURLWithPath: item.path).deletingLastPathComponent().path) {
+                        Button("Kaldır") { Task { await model.removeLoginItem(item) } }
+                            .buttonStyle(TileButtonStyle())
+                    }
+                }
+                ForEach(model.removedLoginItems) { item in
+                    row(item.name, detail: "Girişte açılmayacak", dimmed: true) {
+                        if LoginItemScript.add(item) != nil {
+                            Button("Geri ekle") { Task { await model.restoreLoginItem(item) } }
+                                .buttonStyle(TileButtonStyle())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.bottom, 8)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.border) }
+        .task { if allowed, !model.loginItemsLoaded { await model.refreshLoginItems() } }
+    }
+
+    private func row<Accessory: View>(_ name: String, detail: String?, dimmed: Bool = false, @ViewBuilder accessory: () -> Accessory) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.keel(15, .semibold))
+                    .foregroundStyle(dimmed ? Palette.slate : Palette.text)
+                    .lineLimit(1)
+                if let detail {
+                    Text(detail)
+                        .font(.keel(12, .medium))
+                        .foregroundStyle(Palette.slate)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            Spacer(minLength: 12)
+            accessory()
+        }
+        .padding(.horizontal, 24)
+        .frame(minHeight: 52)
+        .overlay(alignment: .top) { Divider().overlay(Palette.divider) }
     }
 }
 

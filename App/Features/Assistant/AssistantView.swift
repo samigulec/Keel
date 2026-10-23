@@ -318,6 +318,10 @@ private struct ChatRow: View {
             ProposalCard(proposal: proposal, freedBytes: freedBytes)
                 .padding(.leading, 42)
 
+        case .action(let proposal):
+            ActionCard(proposal: proposal)
+                .padding(.leading, 42)
+
         case .notice(let isError):
             Label(item.text, systemImage: isError ? "exclamationmark.triangle.fill" : "info.circle")
                 .font(.keel(13, .semibold))
@@ -461,6 +465,85 @@ private struct ProposalCard: View {
                 .foregroundStyle(Palette.text)
         }
         .frame(minHeight: 34)
+    }
+}
+
+/// A startup, app or fan suggestion; it runs only when the user presses
+/// its button, and most can be undone from the same card.
+private struct ActionCard: View {
+    @Environment(AssistantModel.self) private var model
+    let proposal: ActionProposal
+
+    var body: some View {
+        let result = model.actionResults[proposal.id]
+        let busy = model.applyingActions.contains(proposal.id)
+        VStack(alignment: .leading, spacing: 12) {
+            Label(proposal.title, systemImage: symbol)
+                .font(.keel(13, .extraBold))
+                .foregroundStyle(Palette.mintText)
+            if !proposal.reason.isEmpty {
+                Text(proposal.reason)
+                    .font(.keel(14, .medium))
+                    .foregroundStyle(Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(proposal.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.keel(13, .semibold))
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.border) }
+
+            if let result {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Label(result.text, systemImage: result.isError ? "exclamationmark.circle.fill" : result.undone ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
+                        .font(.keel(13, .bold))
+                        .foregroundStyle(result.isError ? Palette.warningText : result.undone ? Palette.slate : Palette.mintText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    if busy {
+                        ProgressView().controlSize(.small)
+                    } else if result.canUndo {
+                        Button {
+                            model.undo(proposal)
+                        } label: {
+                            Label("Geri al", systemImage: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(TileButtonStyle())
+                    }
+                }
+            } else {
+                HStack(spacing: 12) {
+                    Button(proposal.buttonTitle) { model.apply(proposal) }
+                        .buttonStyle(TileButtonStyle(prominent: true))
+                        .disabled(busy)
+                    if busy { ProgressView().controlSize(.small) }
+                    Text(proposal.footnote)
+                        .font(.keel(12, .medium))
+                        .foregroundStyle(Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: 560, alignment: .leading)
+        .background(Palette.mist, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border) }
+    }
+
+    private var symbol: String {
+        switch proposal.kind {
+        case .startup: "power"
+        case .removeLoginItems: "person.crop.circle.badge.minus"
+        case .quitApps: "xmark.app"
+        case .fans: "fan"
+        }
     }
 }
 

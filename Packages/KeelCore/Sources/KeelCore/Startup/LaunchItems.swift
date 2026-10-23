@@ -18,7 +18,8 @@ public struct LaunchItem: Identifiable, Equatable, Sendable {
     public let program: String?
     public let runsAtLoad: Bool
     public let keepsAlive: Bool
-    /// The plist's own Disabled key. launchctl overrides are not visible here.
+    /// Turned off, by the plist's own Disabled key or by `launchctl disable`
+    /// (which wins when both say something).
     public let isDisabled: Bool
     public let scope: Scope
 
@@ -34,27 +35,35 @@ public struct LaunchItem: Identifiable, Equatable, Sendable {
 }
 
 public enum LaunchItemScanner {
-    public static func scan(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [LaunchItem] {
+    /// `sessionOverrides` and `systemOverrides` are what `launchctl
+    /// print-disabled` reports for the user's session and for the system.
+    public static func scan(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        sessionOverrides: [String: Bool] = [:],
+        systemOverrides: [String: Bool] = [:]
+    ) -> [LaunchItem] {
         let locations: [(URL, LaunchItem.Scope)] = [
             (home.appendingPathComponent("Library/LaunchAgents", isDirectory: true), .user),
             (URL(fileURLWithPath: "/Library/LaunchAgents", isDirectory: true), .allUsers),
             (URL(fileURLWithPath: "/Library/LaunchDaemons", isDirectory: true), .system),
         ]
-        return locations.flatMap { items(in: $0.0, scope: $0.1) }
+        return locations.flatMap { location in
+            items(in: location.0, scope: location.1, overrides: location.1 == .system ? systemOverrides : sessionOverrides)
+        }
     }
 
-    static func items(in directory: URL, scope: LaunchItem.Scope) -> [LaunchItem] {
+    static func items(in directory: URL, scope: LaunchItem.Scope, overrides: [String: Bool] = [:]) -> [LaunchItem] {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
         ) else { return [] }
 
         return files
             .filter { $0.pathExtension == "plist" }
-            .compactMap { parse($0, scope: scope) }
+            .compactMap { parse($0, scope: scope, overrides: overrides) }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
-    static func parse(_ url: URL, scope: LaunchItem.Scope) -> LaunchItem? {
+    static func parse(_ url: URL, scope: LaunchItem.Scope, overrides: [String: Bool] = [:]) -> LaunchItem? {
         guard let data = try? Data(contentsOf: url),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let label = plist["Label"] as? String else { return nil }
@@ -69,7 +78,7 @@ public enum LaunchItemScanner {
             program: program,
             runsAtLoad: plist["RunAtLoad"] as? Bool ?? false,
             keepsAlive: keepsAlive,
-            isDisabled: plist["Disabled"] as? Bool ?? false,
+            isDisabled: overrides[label] ?? plist["Disabled"] as? Bool ?? false,
             scope: scope
         )
     }

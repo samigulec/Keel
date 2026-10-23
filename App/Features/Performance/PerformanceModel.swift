@@ -60,8 +60,101 @@ final class PerformanceModel {
     }
 
     func refreshLaunchItems() async {
-        launchItems = await Task.detached(priority: .utility) { LaunchItemScanner.scan() }.value
+        // What `launchctl disable` turned off is not in the plists.
+        async let session = SystemControl.overrides(domain: "gui/\(getuid())")
+        async let system = SystemControl.overrides(domain: "system")
+        let (sessionOverrides, systemOverrides) = await (session, system)
+        launchItems = await Task.detached(priority: .utility) {
+            LaunchItemScanner.scan(sessionOverrides: sessionOverrides, systemOverrides: systemOverrides)
+        }.value
         launchItemsLoaded = true
+    }
+
+    // MARK: Changing startup
+
+    /// Services being switched right now, by id.
+    private(set) var switchingItems: Set<String> = []
+    /// The last problem switching a service or a login item.
+    private(set) var startupMessage: String?
+
+    /// Turns background services off or back on and returns the problems;
+    /// system services ask for an administrator's password first.
+    @discardableResult
+    func setLaunchItems(_ items: [LaunchItem], enabled: Bool) async -> [String] {
+        let ids = Set(items.map(\.id))
+        switchingItems.formUnion(ids)
+        let problems = await SystemControl.setLaunchItems(items, enabled: enabled)
+        startupMessage = problems.isEmpty ? nil : problems.joined(separator: "\n")
+        await refreshLaunchItems()
+        switchingItems.subtract(ids)
+        return problems
+    }
+
+    /// Apps in "Open at Login". Reading them needs permission to use System
+    /// Events, so the list loads when the user asks the first time.
+    private(set) var loginItems: [LoginItem] = []
+    private(set) var loginItemsLoaded = false
+    private(set) var loginItemsError: String?
+    /// Taken out of the list since Keel started, so they can be put back.
+    private(set) var removedLoginItems: [LoginItem] = []
+
+    func refreshLoginItems() async {
+        switch await SystemControl.loginItems() {
+        case .success(let items):
+            loginItems = items
+            loginItemsError = nil
+            loginItemsLoaded = true
+        case .failure(let error):
+            loginItemsError = error.message
+        }
+    }
+
+    /// Finds the login items that are listed now, reading the list once if needed.
+    func loginItemsWhenReady() async -> [LoginItem] {
+        if !loginItemsLoaded { await refreshLoginItems() }
+        return loginItems
+    }
+
+    @discardableResult
+    func removeLoginItem(_ item: LoginItem) async -> SystemControl.Outcome {
+        let outcome = await SystemControl.appleScript(LoginItemScript.remove(item))
+        if case .done = outcome, !removedLoginItems.contains(item) { removedLoginItems.append(item) }
+        startupMessage = outcome.errorMessage
+        await refreshLoginItems()
+        return outcome
+    }
+
+    func restoreLoginItem(_ item: LoginItem) async {
+        guard let script = LoginItemScript.add(item) else { return }
+        let outcome = await SystemControl.appleScript(script)
+        if case .done = outcome { removedLoginItems.removeAll { $0 == item } }
+        startupMessage = outcome.errorMessage
+        await refreshLoginItems()
+    }
+
+    // MARK: Fans
+
+    private(set) var fanBusy = false
+    /// What the last fan change did, or why it did not.
+    private(set) var fanMessage: String?
+    /// The last setting Keel applied; macOS resets fans to automatic on restart.
+    private(set) var fanSetting: FanSetting?
+
+    @discardableResult
+    func setFans(_ setting: FanSetting) async -> SystemControl.Outcome {
+        fanBusy = true
+        let outcome = await SystemControl.setFans(setting)
+        switch outcome {
+        case .done(let output):
+            fanSetting = setting
+            fanMessage = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .cancelled:
+            break
+        case .failed(let message):
+            fanMessage = message
+        }
+        fanBusy = false
+        return outcome
     }
 
     static func openLoginItemsSettings() {

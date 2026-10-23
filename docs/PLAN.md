@@ -120,6 +120,16 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - [x] Akıllı Tarama: tek tıkla bakım, sağlık puanı ve bulgular
 - [x] Keel AI sohbet geçmişi, her ekranda yol arkadaşı paneli
 - [x] Ayarlar (⌘,), oturum açılışında başlatma, ⌘1–⌘6 kısayolları
+- [x] Başlangıç kontrolü: arka plan servislerini `launchctl disable/enable` ile
+      kapatıp açma (sistem servisleri macOS yönetici şifresiyle, Apple'ın
+      kendi servisleri hariç), "Oturum açılışında" listesi (System Events)
+- [x] Fan kontrolü: Otomatik / %60 / %80 / en yüksek; SMC'ye yazan tek
+      seferlik komut yönetici şifresiyle root olarak çalışır (M5: `F0md`,
+      M3/M4: `Ftst` kilidi, M1/M2: `F0Md`, Intel: `FS! `); hata olursa
+      bütün fanlar otomatiğe döner. Kalıcı yardımcı (SMAppService daemon)
+      Developer ID imzasıyla Faz 4'te
+- [x] Keel AI eylem kartları: servis/giriş öğesi kapatma, uygulama
+      kapatma, fan ayarı; kullanıcı onaylamadan hiçbir şey değişmez
 - Kullanıcı LaunchAgent'larını aç/kapat
 
 ### Faz 3 — Yönetici yetkisi gerektirenler

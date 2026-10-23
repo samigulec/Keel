@@ -6,6 +6,8 @@
 	<string>tr</string>
 	<key>CFBundleDisplayName</key>
 	<string>Keel</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Keel, oturum açılışında açılan uygulamaları listelemek ve istediğinde listeden çıkarmak için System Events'i kullanır.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

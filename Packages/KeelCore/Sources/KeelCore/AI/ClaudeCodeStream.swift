@@ -80,11 +80,13 @@ extension JSONValue {
     }
 }
 
-/// Keel AI asks text-only providers to end an answer with a fenced
-/// `keel-cleanup` block when it suggests a cleanup. This hides the block
-/// from the streamed text and returns its JSON once the answer is complete.
+/// Keel AI asks text-only providers to end an answer with fenced blocks
+/// when it suggests something: `keel-cleanup` for a cleanup, `keel-action`
+/// for anything else (startup items, quitting apps, fans). This hides the
+/// blocks from the streamed text and returns their JSON once the answer is
+/// complete.
 public struct ProposalStreamFilter: Sendable {
-    static let marker = "```keel-cleanup"
+    static let marker = "```keel-"
 
     private var pending = ""
     private var captured: String?
@@ -111,29 +113,52 @@ public struct ProposalStreamFilter: Sendable {
         return visible
     }
 
-    /// The text still held back, and the proposals found in the block.
-    public mutating func finish() -> (visible: String, proposals: [JSONValue]) {
+    /// The text still held back, the cleanups and the other actions found.
+    public mutating func finish() -> (visible: String, proposals: [JSONValue], actions: [JSONValue]) {
         defer {
             pending = ""
             captured = nil
         }
-        guard let captured else { return (pending, []) }
+        guard let captured else { return (pending, [], []) }
 
-        let body: Substring
+        var proposals: [JSONValue] = []
+        var actions: [JSONValue] = []
         var trailing = ""
-        if let end = captured.range(of: "```") {
-            body = captured[..<end.lowerBound]
-            trailing = String(captured[end.upperBound...])
-        } else {
-            body = captured[...]
+        var rest = Substring(captured)
+        while true {
+            // "cleanup\n{...}\n```" or "action\n{...}\n```"
+            let kind = rest.prefix { $0.isLetter || $0 == "-" }
+            rest = rest.dropFirst(kind.count)
+            let body: Substring
+            if let end = rest.range(of: "```") {
+                body = rest[..<end.lowerBound]
+                rest = rest[end.upperBound...]
+            } else {
+                body = rest
+                rest = ""
+            }
+            let objects = Self.objects(in: body)
+            switch kind {
+            case "cleanup": proposals += objects
+            case "action": actions += objects
+            default: break
+            }
+            guard let next = rest.range(of: Self.marker) else {
+                trailing += rest
+                break
+            }
+            trailing += rest[..<next.lowerBound]
+            rest = rest[next.upperBound...]
         }
-        let proposals: [JSONValue]
+        return (trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : trailing, proposals, actions)
+    }
+
+    private static func objects(in body: Substring) -> [JSONValue] {
         switch try? JSONValue.parse(String(body).trimmingCharacters(in: .whitespacesAndNewlines)) {
-        case .object(let object)?: proposals = [.object(object)]
-        case .array(let array)?: proposals = array.filter { $0.objectValue != nil }
-        default: proposals = []
+        case .object(let object)?: [.object(object)]
+        case .array(let array)?: array.filter { $0.objectValue != nil }
+        default: []
         }
-        return (trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : trailing, proposals)
     }
 
     private static func longestMarkerPrefixSuffix(of text: String) -> Int {

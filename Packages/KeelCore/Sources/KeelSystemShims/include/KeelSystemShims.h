@@ -25,6 +25,9 @@ io_connect_t keel_smc_open(void);
 void keel_smc_close(io_connect_t connection);
 /// Reads a four-letter key such as "F0Ac". Returns 0 on success.
 int keel_smc_read(io_connect_t connection, const char *key, keel_smc_value *value);
+/// Writes a key's raw bytes; `size` must match the key's own size. Needs
+/// root. Returns 0 on success.
+int keel_smc_write(io_connect_t connection, const char *key, const uint8_t *bytes, uint32_t size);
 
 /// A temperature sensor reported by the HID event system (Apple silicon).
 typedef struct {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main
+/// Started by `KeelMain`.
 struct KeelApp: App {
     static let mainWindowID = "main"
 

@@ -8,6 +8,7 @@ struct ChatItem: Identifiable {
         case assistant
         case tool(name: String)
         case proposal(CleanupProposal)
+        case action(ActionProposal)
         case notice(isError: Bool)
     }
 
@@ -59,6 +60,10 @@ final class AssistantModel {
     /// Where each applied suggestion's items went, so the card can undo it.
     private(set) var undoableProposals: [UUID: [TrashedItem]] = [:]
     private(set) var undoneProposals: Set<UUID> = []
+    /// Outcomes of the other suggestions (startup, apps, fans), by card.
+    private(set) var actionResults: [UUID: ActionResult] = [:]
+    /// Cards being carried out right now.
+    private(set) var applyingActions: Set<UUID> = []
     private(set) var stats = ChatStats()
     var draft = ""
     /// The screen the user is on when they write from the companion panel;
@@ -138,6 +143,7 @@ final class AssistantModel {
         restoredTranscript = nil
         items = []
         appliedProposals = [:]
+        actionResults = [:]
         stats = ChatStats()
         isRunning = false
     }
@@ -210,11 +216,16 @@ final class AssistantModel {
         let isOnDevice = connection.kind == .apple
         let tools = KeelTools.make(
             status: status, cleanup: cleanup, performance: performance, applications: applications,
-            largeFiles: largeFiles, compact: isOnDevice
-        ) { [weak self] proposal in
-            guard let self, self.chatID == chat else { return }
-            self.items.append(ChatItem(kind: .proposal(proposal)))
-        }
+            largeFiles: largeFiles, compact: isOnDevice,
+            propose: { [weak self] proposal in
+                guard let self, self.chatID == chat else { return }
+                self.items.append(ChatItem(kind: .proposal(proposal)))
+            },
+            proposeAction: { [weak self] proposal in
+                guard let self, self.chatID == chat else { return }
+                self.items.append(ChatItem(kind: .action(proposal)))
+            }
+        )
 
         let session: any ChatSession
         if connection.kind == .apple {
@@ -231,6 +242,7 @@ final class AssistantModel {
             session = apple
         } else {
             let proposeTool = tools.first { $0.definition.name == "propose_cleanup" }
+            let actionTool = tools.first { $0.definition.name == "propose_action" }
             session = AccountSession(
                 kind: connection.kind,
                 model: connection.usesAccountDefault ? nil : connection.model,
@@ -243,6 +255,9 @@ final class AssistantModel {
                 },
                 propose: { input in
                     _ = try? await proposeTool?.run(input)
+                },
+                proposeAction: { input in
+                    _ = try? await actionTool?.run(input)
                 },
                 fellBack: { [weak self] model, notice in
                     guard let self, self.chatID == chat, var current = self.connection else { return }
@@ -448,6 +463,27 @@ final class AssistantModel {
         }
     }
 
+    /// Carries out a startup, app or fan suggestion the user confirmed on its card.
+    func apply(_ proposal: ActionProposal) {
+        guard actionResults[proposal.id] == nil, !applyingActions.contains(proposal.id) else { return }
+        applyingActions.insert(proposal.id)
+        Task {
+            let result = await ActionProposals.apply(proposal, performance: performance)
+            applyingActions.remove(proposal.id)
+            actionResults[proposal.id] = result
+        }
+    }
+
+    func undo(_ proposal: ActionProposal) {
+        guard let applied = actionResults[proposal.id], applied.canUndo, !applyingActions.contains(proposal.id) else { return }
+        applyingActions.insert(proposal.id)
+        Task {
+            let result = await ActionProposals.undo(proposal, performance: performance)
+            applyingActions.remove(proposal.id)
+            actionResults[proposal.id] = result
+        }
+    }
+
     var pendingBytes: Int64 { pendingCleanup?.items.reduce(0) { $0 + $1.sizeBytes } ?? 0 }
 
     var pendingPermanentBytes: Int64 {
@@ -461,8 +497,8 @@ final class AssistantModel {
 
     How to work:
     - Look before you answer. Use the tools to read the Mac's real state instead of guessing, and quote the numbers you found.
-    - You cannot delete, quit or change anything yourself. To suggest a cleanup, call propose_cleanup; the user sees a card and decides. Never say something was cleaned unless the user applied it.
-    - Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners, removing language files from apps, or disabling system services.
+    - You cannot change anything yourself; you suggest, the user decides. To suggest a cleanup, call propose_cleanup. To turn background services or login items off or on, quit apps, or set the fans, call propose_action. The user sees a card with a button. Never say something was done unless the user applied it.
+    - Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners or removing language files from apps. Keel refuses to switch macOS's own services.
     - Write for someone who is not an expert. Keep answers short, and use short bullet lists for steps.
     - Answer in the language the user writes in.
     - Privacy: you only receive the summaries Keel's tools return (sizes, app and folder names, readings). You never see file contents.

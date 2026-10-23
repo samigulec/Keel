@@ -7,7 +7,7 @@
 // MARK: - SMC
 
 // The AppleSMC user client's structures, as every SMC reader uses them.
-enum { KEEL_SMC_KERNEL_INDEX = 2, KEEL_SMC_READ_KEY = 5, KEEL_SMC_GET_KEY_INFO = 9 };
+enum { KEEL_SMC_KERNEL_INDEX = 2, KEEL_SMC_READ_KEY = 5, KEEL_SMC_WRITE_KEY = 6, KEEL_SMC_GET_KEY_INFO = 9 };
 
 typedef struct {
     char major, minor, build, reserved;
@@ -83,6 +83,26 @@ int keel_smc_read(io_connect_t connection, const char *key, keel_smc_value *valu
     value->type[4] = 0;
     value->size = size;
     memcpy(value->bytes, output.bytes, size);
+    return 0;
+}
+
+int keel_smc_write(io_connect_t connection, const char *key, const uint8_t *bytes, uint32_t size) {
+    if (!connection || !key || strlen(key) != 4 || !bytes || size == 0 || size > 32) return -1;
+    keel_smc_data input, output;
+    memset(&input, 0, sizeof input);
+    memset(&output, 0, sizeof output);
+
+    // The SMC rejects a write whose size differs from the key's.
+    input.key = keel_fourcc(key);
+    input.data8 = KEEL_SMC_GET_KEY_INFO;
+    if (keel_smc_call(connection, &input, &output) != KERN_SUCCESS || output.result != 0) return -1;
+    if (output.keyInfo.dataSize != size) return -1;
+
+    input.keyInfo.dataSize = size;
+    input.data8 = KEEL_SMC_WRITE_KEY;
+    memcpy(input.bytes, bytes, size);
+    memset(&output, 0, sizeof output);
+    if (keel_smc_call(connection, &input, &output) != KERN_SUCCESS || output.result != 0) return -1;
     return 0;
 }
 

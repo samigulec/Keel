@@ -115,6 +115,9 @@ final class AppleIntelligenceSession: ChatSession {
             if tool.definition.name == "propose_cleanup" {
                 return ProposeCleanupTool(description: tool.definition.description, bridge: bridge)
             }
+            if tool.definition.name == "propose_action" {
+                return ProposeActionTool(description: tool.definition.description, bridge: bridge)
+            }
             return NoArgumentTool(name: tool.definition.name, description: tool.definition.description, bridge: bridge)
         }
         self.bridge = bridge
@@ -171,6 +174,41 @@ private struct ProposeCleanupTool: Tool {
             "categories": .array(arguments.categories.map(JSONValue.string)),
             "reason": .string(arguments.reason),
         ])
+    }
+}
+
+@available(macOS 26.0, *)
+private struct ProposeActionTool: Tool {
+    let name = "propose_action"
+    let description: String
+    let bridge: AppleToolBridge
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "What to do", .anyOf(["disable_startup", "enable_startup", "remove_login_items", "quit_apps", "set_fans"]))
+        var action: String
+        @Guide(description: "Service labels, login item names or app names; empty for set_fans")
+        var names: [String]
+        @Guide(description: "set_fans only: 0 for automatic, otherwise 50 to 100 percent of each fan's top speed")
+        var percent: Int
+        @Guide(description: "One sentence on why this helps")
+        var reason: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        var input: [String: JSONValue] = [
+            "action": .string(arguments.action),
+            "names": .array(arguments.names.map(JSONValue.string)),
+            "reason": .string(arguments.reason),
+        ]
+        if arguments.action == "set_fans" {
+            if arguments.percent == 0 {
+                input["mode"] = "auto"
+            } else {
+                input["percent"] = .number(Double(arguments.percent))
+            }
+        }
+        return try await bridge.run(name: name, input: .object(input))
     }
 }
 #endif

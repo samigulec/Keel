@@ -61,6 +61,17 @@ struct ClaudeCodeTests {
         #expect(end.proposals == [["categories": ["userCaches"], "reason": "4 GB yer açar"]])
     }
 
+    @Test func separatesCleanupsFromActions() {
+        var filter = ProposalStreamFilter()
+        var shown = filter.feed("İkisini de yapabiliriz.\n```keel-cleanup\n{\"categories\":[\"userCaches\"],\"reason\":\"a\"}\n```\n")
+        shown += filter.feed("```keel-action\n{\"action\":\"disable_startup\",\"labels\":[\"com.valvesoftware.steam\"],\"reason\":\"b\"}\n```")
+        let end = filter.finish()
+        shown += end.visible
+        #expect(shown == "İkisini de yapabiliriz.\n")
+        #expect(end.proposals == [["categories": ["userCaches"], "reason": "a"]])
+        #expect(end.actions == [["action": "disable_startup", "labels": ["com.valvesoftware.steam"], "reason": "b"]])
+    }
+
     @Test func ordinaryCodeBlocksPassThrough() {
         var filter = ProposalStreamFilter()
         var shown = filter.feed("Komut: ``")

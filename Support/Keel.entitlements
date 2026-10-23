@@ -4,5 +4,8 @@
 <dict>
 	<!-- Not sandboxed on purpose: cleaning other apps' caches needs access
 	     the App Store sandbox does not grant. Keel ships with Developer ID. -->
+	<!-- Reading and changing "Open at Login" goes through System Events. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>
