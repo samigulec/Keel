@@ -62,7 +62,9 @@ struct KeelApp: App {
                 .environment(assistant)
         }
 
-        MenuBarExtra("Keel", systemImage: "gauge.with.dots.needle.33percent", isInserted: $menuBarVisible) {
+        // One way only: with a two-way binding the system can write the
+        // setting back on each update and rebuild the app's scenes again.
+        MenuBarExtra("Keel", systemImage: "gauge.with.dots.needle.33percent", isInserted: .constant(menuBarVisible)) {
             MenuBarContent()
                 .environment(status)
         }
