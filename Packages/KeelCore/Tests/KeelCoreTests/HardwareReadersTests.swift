@@ -134,3 +134,55 @@ struct HardwareReadersTests {
         #expect(snapshot.swapUsedBytes == 200 * 1024)
     }
 }
+
+@Suite("Temperature and fan sensors")
+struct SensorTests {
+    @Test func decodesSMCTypes() {
+        // 2,000 RPM as Apple silicon's float, and as Intel's fpe2.
+        let float: [UInt8] = [0x00, 0x00, 0xFA, 0x44]
+        #expect(SMCValue.decode(type: "flt ", bytes: float) == 2_000)
+        #expect(SMCValue.decode(type: "fpe2", bytes: [0x1F, 0x40]) == 2_000)
+        #expect(SMCValue.decode(type: "sp78", bytes: [0x2D, 0x80]) == 45.5)
+        #expect(SMCValue.decode(type: "sp78", bytes: [0xFF, 0x00]) == -1)
+        #expect(SMCValue.decode(type: "ui8 ", bytes: [2]) == 2)
+        #expect(SMCValue.decode(type: "ui16", bytes: [0x01, 0x00]) == 256)
+        #expect(SMCValue.decode(type: "ch8*", bytes: [1]) == nil)
+        #expect(SMCValue.decode(type: "flt ", bytes: [1]) == nil)
+    }
+
+    @Test func groupsSensorsByName() {
+        #expect(SensorReader.group(for: "PMU tdie3") == .cpu)
+        #expect(SensorReader.group(for: "pACC MTR Temp Sensor2") == .cpu)
+        #expect(SensorReader.group(for: "GPU MTR Temp Sensor1") == .gpu)
+        #expect(SensorReader.group(for: "SOC MTR Temp Sensor0") == .soc)
+        #expect(SensorReader.group(for: "PMU tdev1") == .soc)
+        #expect(SensorReader.group(for: "NAND CH0 temp") == .ssd)
+        #expect(SensorReader.group(for: "gas gauge battery") == .battery)
+        #expect(SensorReader.group(for: "Palm rest") == .other)
+    }
+
+    @Test func dropsCalibrationDuplicatesAndNonsense() {
+        let sensors = SensorReader.sensors(from: [
+            ("PMU tdie1", 48.5), ("PMU tdie2", 52.0), ("PMU tdie1", 49.0),
+            ("PMU tcal", 51.3), ("GPU MTR Temp Sensor1", -40), ("NAND CH0 temp", 36.0), ("", 30),
+        ])
+        #expect(sensors.map(\.name) == ["PMU tdie1", "PMU tdie2", "NAND CH0 temp"])
+
+        let snapshot = ThermalSnapshot(sensors: sensors, fans: [], hasFans: false)
+        let cpu = snapshot.summary(.cpu)
+        #expect(cpu?.hottest == 52.0)
+        #expect(cpu?.average == 50.25)
+        #expect(cpu?.sensorCount == 2)
+        #expect(snapshot.summary(.gpu) == nil)
+    }
+
+    @Test func fanFractionBetweenMinimumAndMaximum() {
+        #expect(FanReading(index: 0, rpm: 3_500, minimumRPM: 1_000, maximumRPM: 6_000).fraction == 0.5)
+        #expect(FanReading(index: 0, rpm: 0, minimumRPM: 1_000, maximumRPM: 6_000).fraction == 0)
+        #expect(FanReading(index: 0, rpm: 2_000, minimumRPM: nil, maximumRPM: 6_000).fraction == nil)
+    }
+
+    @Test func liveSnapshotDoesNotCrash() {
+        _ = SensorReader.snapshot()
+    }
+}

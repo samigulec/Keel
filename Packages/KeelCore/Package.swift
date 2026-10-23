@@ -8,7 +8,13 @@ let package = Package(
         .library(name: "KeelCore", targets: ["KeelCore"]),
     ],
     targets: [
-        .target(name: "KeelSystemShims"),
+        .target(
+            name: "KeelSystemShims",
+            linkerSettings: [
+                .linkedFramework("IOKit", .when(platforms: [.macOS])),
+                .linkedFramework("CoreFoundation", .when(platforms: [.macOS])),
+            ]
+        ),
         .target(name: "KeelCore", dependencies: ["KeelSystemShims"]),
         .testTarget(name: "KeelCoreTests", dependencies: ["KeelCore"]),
     ]
