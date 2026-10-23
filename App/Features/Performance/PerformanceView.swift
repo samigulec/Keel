@@ -9,7 +9,7 @@ struct PerformanceView: View {
         VStack(alignment: .leading, spacing: 24) {
             PageHeader(
                 title: "Performans",
-                subtitle: "İşlemci, GPU, bellek ve SSD'nin anlık durumu."
+                subtitle: "İşlemci, GPU, bellek, SSD ve ağın anlık durumu."
             )
 
             SystemOverview(status: status)
@@ -35,6 +35,16 @@ struct PerformanceView: View {
                         Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
                     }
                 }
+                GridRow {
+                    NetworkLiveCard(
+                        rate: status.networkRate,
+                        totals: status.networkTotals,
+                        address: status.networkAddress,
+                        inHistory: status.networkInHistory,
+                        outHistory: status.networkOutHistory
+                    )
+                    ProcessesCard(processes: model.topProcesses, coreCount: status.info.logicalCores)
+                }
             }
 
             HStack(alignment: .top, spacing: 16) {
@@ -52,10 +62,13 @@ struct PerformanceView: View {
             await model.refreshLaunchItems()
         }
         .task {
-            // Per-app memory is only worth measuring while someone is looking.
+            // Per-app memory and per-process CPU are only worth measuring while someone is looking.
+            var tick = 0
             while !Task.isCancelled {
-                await model.refreshApps()
-                try? await Task.sleep(for: .seconds(5))
+                await model.refreshProcesses()
+                if tick % 2 == 0 { await model.refreshApps() }
+                tick += 1
+                try? await Task.sleep(for: .seconds(2.5))
             }
         }
     }
@@ -179,6 +192,11 @@ private enum Format {
 
     static func speed(_ bytesPerSecond: Double) -> String {
         bytesPerSecond < 1_000 ? "0 MB/sn" : ByteFormat.string(Int64(bytesPerSecond)) + "/sn"
+    }
+
+    /// Network rates are often small; show bytes rather than "0 MB".
+    static func networkSpeed(_ bytesPerSecond: Double) -> String {
+        bytesPerSecond < 1_000 ? "\(Int(bytesPerSecond)) B/sn" : ByteFormat.string(Int64(bytesPerSecond)) + "/sn"
     }
 
     static func uptime(_ seconds: TimeInterval) -> String {
@@ -441,6 +459,88 @@ private struct DiskLiveCard: View {
                 .font(.keelMono(20, .semibold))
                 .tracking(-1)
                 .foregroundStyle(Palette.text)
+        }
+    }
+}
+
+private struct NetworkLiveCard: View {
+    let rate: NetworkRate?
+    let totals: NetworkTotals?
+    let address: NetworkAddress?
+    let inHistory: [Double]
+    let outHistory: [Double]
+
+    private static let inColor = Color(hex: 0x4FD8F5)
+    private static let outColor = Color(hex: 0xA08BFF)
+
+    var body: some View {
+        PanelCard {
+            CardTitle(title: "Ağ", status: address.map { "\($0.interface) · \($0.address)" }, statusColor: Palette.slate)
+            HStack(alignment: .firstTextBaseline, spacing: 24) {
+                speed("İndirme", rate?.receivedPerSecond, color: Self.inColor)
+                speed("Yükleme", rate?.sentPerSecond, color: Self.outColor)
+            }
+            let scale = max((inHistory + outHistory).max() ?? 0, 100_000)
+            VStack(spacing: 4) {
+                Sparkline(values: inHistory, maxValue: scale, tint: Self.inColor)
+                Sparkline(values: outHistory, maxValue: scale, tint: Self.outColor)
+            }
+            if let totals {
+                Text("Açılıştan beri ↓ \(ByteFormat.string(Int64(clamping: totals.received)))  ↑ \(ByteFormat.string(Int64(clamping: totals.sent)))")
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.slate)
+            }
+        }
+    }
+
+    private func speed(_ title: String, _ value: Double?, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(title)
+                    .font(.keel(12, .bold))
+                    .foregroundStyle(Palette.slate)
+            }
+            Text(value.map(Format.networkSpeed) ?? "—")
+                .font(.keelMono(20, .semibold))
+                .tracking(-1)
+                .foregroundStyle(Palette.text)
+        }
+    }
+}
+
+/// The busiest processes right now, like Activity Monitor's CPU tab.
+private struct ProcessesCard: View {
+    let processes: [ProcessCPUUsage]
+    let coreCount: Int
+
+    var body: some View {
+        PanelCard {
+            CardTitle(title: "En çok işlemci kullananlar", status: "% bir çekirdeğe göre", statusColor: Palette.slate)
+            if processes.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(processes.prefix(6)) { process in
+                        HStack(spacing: 10) {
+                            Text(process.name)
+                                .font(.keel(14, .semibold))
+                                .foregroundStyle(Palette.text)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 8)
+                            ProgressBar(fraction: process.coreFraction / Double(max(coreCount, 1)), height: 5)
+                                .frame(width: 70)
+                            Text(Format.percent(process.coreFraction))
+                                .font(.keelMono(13, .semibold))
+                                .foregroundStyle(Palette.text)
+                                .frame(width: 52, alignment: .trailing)
+                        }
+                        .help("pid \(process.pid)")
+                    }
+                }
+            }
         }
     }
 }

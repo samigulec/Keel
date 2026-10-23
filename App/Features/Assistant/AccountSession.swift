@@ -271,6 +271,7 @@ enum KeelContext {
         status: SystemStatus,
         cleanup: CleanupModel,
         performance: PerformanceModel,
+        applications: ApplicationsModel,
         report: (AssistantEvent) -> Void
     ) async -> JSONValue {
         func step(_ name: String, _ work: () async -> JSONValue) async -> JSONValue {
@@ -296,12 +297,16 @@ enum KeelContext {
         if !performance.launchItemsLoaded {
             await performance.refreshLaunchItems()
         }
+        let apps = await step("get_installed_apps") {
+            KeelTools.installedApps(await applications.listWhenReady(), compact: true)
+        }
 
         return [
             "system": system,
             "cleanable_space": cleanable,
             "top_memory_apps": apps,
             "background_services": KeelTools.backgroundServices(performance, compact: true),
+            "installed_apps": apps,
         ]
     }
 
@@ -310,13 +315,15 @@ enum KeelContext {
     static let instructions = """
     You are Keel AI, the assistant inside Keel, a maintenance app for macOS. You help the user understand and improve their Mac: speed, memory, storage, battery, background services and cleanup.
 
-    Every user message starts with <keel_context>: fresh readings Keel took from this Mac just now (system status, cleanable space by category with item paths, apps using the most memory, background services). Answer from that data and quote the numbers; do not guess beyond it. You have no tools and cannot run commands or read files; never try to.
+    Every user message starts with <keel_context>: fresh readings Keel took from this Mac just now (system status, cleanable space by category with item paths, apps using the most memory, background services, installed apps with sizes and last use). Answer from that data and quote the numbers; do not guess beyond it. You have no tools and cannot run commands or read files; never try to.
 
     To suggest a cleanup, end your answer with exactly one block in this form, and nothing after it:
     ```keel-cleanup
     {"items": ["~/Library/Caches/Firefox/Profiles"], "categories": [], "reason": "One sentence on why this helps."}
     ```
     When the user names specific things, list them in "items" using the exact paths from the context. For whole categories use "categories" with ids from the context that have items. Either list may be empty. Prefer the preselected ones; include "trash" (deleted permanently) or "oldDownloads" (personal files) only when the user clearly wants that. Keel shows the block as a card and nothing is removed unless the user confirms, so never say something was cleaned.
+
+    You cannot remove apps. When the user wants to, point them to Keel's Uygulamalar section, which moves an app and its leftover files to the Trash.
 
     Be honest about macOS: free RAM is used as cache, so high memory use alone is not a problem; memory pressure is what matters. Do not recommend RAM cleaners, removing language files from apps, or disabling system services.
 

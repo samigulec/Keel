@@ -17,6 +17,9 @@ final class PerformanceModel {
     private(set) var topApps: [AppMemoryUsage] = []
     private(set) var launchItems: [LaunchItem] = []
     private(set) var launchItemsLoaded = false
+    /// The busiest processes since the previous refresh.
+    private(set) var topProcesses: [ProcessCPUUsage] = []
+    @ObservationIgnored private var lastProcessSample: (times: [ProcessCPUTime], time: ContinuousClock.Instant)?
 
     static let topAppCount = 8
 
@@ -45,6 +48,15 @@ final class PerformanceModel {
             .sorted { $0.footprintBytes > $1.footprintBytes }
             .prefix(Self.topAppCount)
             .map { $0 }
+    }
+
+    func refreshProcesses() async {
+        let times = await Task.detached(priority: .utility) { ProcessCPU.sample() }.value
+        let now = ContinuousClock.now
+        if let last = lastProcessSample {
+            topProcesses = ProcessCPU.usage(from: last.times, to: times, elapsed: last.time.duration(to: now))
+        }
+        lastProcessSample = (times, now)
     }
 
     func refreshLaunchItems() async {

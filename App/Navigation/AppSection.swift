@@ -21,9 +21,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     /// The roadmap phase that ships this section (see docs/PLAN.md).
     var phase: Int {
         switch self {
-        case .smartScan, .cleanup, .performance: 1
-        case .applications: 2
-        case .assistant: 1
+        case .smartScan, .cleanup, .performance, .applications, .assistant: 1
         }
     }
 }

@@ -43,6 +43,8 @@ struct RootView: View {
             CleanupView()
         case .performance:
             PerformanceView()
+        case .applications:
+            ApplicationsView()
         default:
             ComingSoonView(section: selection)
         }

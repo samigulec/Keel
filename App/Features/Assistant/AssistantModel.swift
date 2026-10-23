@@ -55,14 +55,16 @@ final class AssistantModel {
     private let status: SystemStatus
     private let cleanup: CleanupModel
     private let performance: PerformanceModel
+    private let applications: ApplicationsModel
     @ObservationIgnored private var session: (any ChatSession)?
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private var chatID = UUID()
 
-    init(status: SystemStatus, cleanup: CleanupModel, performance: PerformanceModel) {
+    init(status: SystemStatus, cleanup: CleanupModel, performance: PerformanceModel, applications: ApplicationsModel) {
         self.status = status
         self.cleanup = cleanup
         self.performance = performance
+        self.applications = applications
         if let saved = AIConnection.load(), saved.kind != .apple || AppleIntelligence.isAvailable {
             connection = saved
         } else if AppleIntelligence.isAvailable {
@@ -161,7 +163,9 @@ final class AssistantModel {
         guard let connection else { throw AIError.invalidResponse("Bağlantı yok") }
         let chat = chatID
         let isOnDevice = connection.kind == .apple
-        let tools = KeelTools.make(status: status, cleanup: cleanup, performance: performance, compact: isOnDevice) { [weak self] proposal in
+        let tools = KeelTools.make(
+            status: status, cleanup: cleanup, performance: performance, applications: applications, compact: isOnDevice
+        ) { [weak self] proposal in
             guard let self, self.chatID == chat else { return }
             self.items.append(ChatItem(kind: .proposal(proposal)))
         }
@@ -185,8 +189,10 @@ final class AssistantModel {
                 kind: connection.kind,
                 model: connection.usesAccountDefault ? nil : connection.model,
                 effort: connection.effort,
-                gatherContext: { [status, cleanup, performance] report in
-                    await KeelContext.gather(status: status, cleanup: cleanup, performance: performance, report: report)
+                gatherContext: { [status, cleanup, performance, applications] report in
+                    await KeelContext.gather(
+                        status: status, cleanup: cleanup, performance: performance, applications: applications, report: report
+                    )
                 },
                 propose: { input in
                     _ = try? await proposeTool?.run(input)

@@ -38,6 +38,7 @@ enum KeelTools {
         "scan_cleanable_space": "Temizlenebilir alan taraması",
         "get_top_memory_apps": "Uygulamaların bellek kullanımı",
         "get_background_services": "Arka plan servisleri",
+        "get_installed_apps": "Yüklü uygulamalar",
         "propose_cleanup": "Temizlik önerisi",
     ]
 
@@ -47,6 +48,7 @@ enum KeelTools {
         status: SystemStatus,
         cleanup: CleanupModel,
         performance: PerformanceModel,
+        applications: ApplicationsModel,
         compact: Bool = false,
         propose: @escaping @MainActor (CleanupProposal) -> Void
     ) -> [AITool] {
@@ -77,6 +79,15 @@ enum KeelTools {
             ) { _ in
                 await performance.refreshApps()
                 return topApps(performance, compact: compact).encodedString()
+            },
+
+            AITool(
+                name: "get_installed_apps",
+                description: "Lists the installed apps: the largest with their size, apps not opened for 90+ days, and Intel-only apps that run through Rosetta. Call this when the user asks which apps take space, which they could remove, or about old or Intel apps. Keel AI cannot remove apps; tell the user to use Keel's Uygulamalar section, which removes an app with its leftover files.",
+                inputSchema: noInput
+            ) { _ in
+                let apps = await applications.listWhenReady()
+                return installedApps(apps, compact: compact).encodedString()
             },
 
             AITool(
@@ -166,6 +177,38 @@ enum KeelTools {
     }
 
     // MARK: - Summaries
+
+    static func installedApps(_ apps: [AppEntry], compact: Bool = false) -> JSONValue {
+        let now = Date()
+        func days(_ date: Date?) -> JSONValue {
+            date.map { .number(Double(Int(now.timeIntervalSince($0) / 86_400))) } ?? .null
+        }
+        let limit = compact ? 5 : 12
+        let largest = apps.filter { $0.sizeBytes != nil }.sorted { $0.sizeBytes! > $1.sizeBytes! }.prefix(limit)
+        let unused = apps.filter { entry in
+            entry.lastUsed.map { now.timeIntervalSince($0) > ApplicationsModel.unusedAfter } ?? false
+        }
+        let intel = apps.filter { $0.app.architecture == .intel }
+
+        return [
+            "count": .number(Double(apps.count)),
+            "total_gb": .number((Double(apps.reduce(0) { $0 + ($1.sizeBytes ?? 0) }) / 1e8).rounded() / 10),
+            "sizes_still_measuring": .bool(apps.contains { $0.sizeBytes == nil }),
+            "largest": .array(largest.map { entry in
+                [
+                    "name": .string(entry.app.name),
+                    "size_mb": .number(Double((entry.sizeBytes ?? 0) / 1_000_000)),
+                    "days_since_used": days(entry.lastUsed),
+                    "source": .string(entry.app.source.rawValue),
+                ]
+            }),
+            "unused_90_days": .array(unused.prefix(limit).map { entry in
+                ["name": .string(entry.app.name), "days_since_used": days(entry.lastUsed)]
+            }),
+            "intel_only": .array(intel.prefix(limit).map { .string($0.app.name) }),
+            "note": "Last-used dates come from Spotlight and may be missing for some apps.",
+        ]
+    }
 
     private static func gib(_ bytes: UInt64) -> JSONValue {
         .number((Double(bytes) / 1_073_741_824 * 10).rounded() / 10)

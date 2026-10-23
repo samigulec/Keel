@@ -108,8 +108,12 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - Full Disk Access yoksa onboarding ekranı ve yönlendirme
 
 ### Faz 2 — Uygulamalar ve Büyük Dosyalar
-- Uygulama kaldırıcı: `.app` + ilgili `~/Library` artıkları (bundle ID ile
-  eşleştirme, kullanıcıya tek tek gösterilir)
+- [x] Uygulama kaldırıcı: `.app` + ilgili `~/Library` artıkları (bundle ID ile
+  eşleştirme, kullanıcıya tek tek gösterilir), sıfırlama, Intel/Universal,
+  App Store kaynağı, kullanılmayan uygulamalar (90+ gün)
+- [x] Performans: ağ hızı (Stats gibi), süreç bazında işlemci kullanımı
+- Sahipsiz artıklar (kaldırılmış uygulamalardan kalanlar), uygulama güncelleyici
+- Sensörler: sıcaklık ve fan (SMC), menü çubuğunda canlı grafikler
 - Büyük ve eski dosyalar bulucu, kopya dosyalar
 - Kullanıcı LaunchAgent'larını aç/kapat
 

@@ -25,12 +25,17 @@ final class SystemStatus {
     private(set) var gpu: GPUSnapshot?
     private(set) var diskRate: DiskIORate?
     private(set) var diskTotals: DiskIOTotals?
+    private(set) var networkRate: NetworkRate?
+    private(set) var networkTotals: NetworkTotals?
+    private(set) var networkAddress: NetworkAddress?
 
     // Recent readings, oldest first, for the sparklines.
     private(set) var cpuHistory: [Double] = []
     private(set) var gpuHistory: [Double] = []
     private(set) var diskReadHistory: [Double] = []
     private(set) var diskWriteHistory: [Double] = []
+    private(set) var networkInHistory: [Double] = []
+    private(set) var networkOutHistory: [Double] = []
 
     private let interval: Duration = .seconds(2)
     /// Slow-changing readings are taken every 15 ticks (30 s).
@@ -39,6 +44,7 @@ final class SystemStatus {
     @ObservationIgnored private var lastTicks: CPUTicks?
     @ObservationIgnored private var lastCoreTicks: [CPUTicks] = []
     @ObservationIgnored private var lastDiskSample: (totals: DiskIOTotals, time: ContinuousClock.Instant)?
+    @ObservationIgnored private var lastNetworkSample: (totals: NetworkTotals, time: ContinuousClock.Instant)?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init() {
@@ -61,6 +67,7 @@ final class SystemStatus {
         if includeSlow {
             disk = try? DiskSpace.current(for: FileManager.default.homeDirectoryForCurrentUser)
             battery = BatteryReader.current()
+            networkAddress = NetworkReader.primaryAddress()
         }
         memory = MemoryReader.current()
         thermalState = ProcessInfo.processInfo.thermalState
@@ -73,6 +80,7 @@ final class SystemStatus {
         if let gpu { gpuHistory = Self.appending(gpu.utilization, to: gpuHistory) }
 
         sampleDisk()
+        sampleNetwork()
     }
 
     private func sampleCPU() {
@@ -106,6 +114,21 @@ final class SystemStatus {
         }
         diskTotals = totals
         lastDiskSample = (totals, now)
+    }
+
+    private func sampleNetwork() {
+        guard let totals = NetworkReader.totals() else { return }
+        let now = ContinuousClock.now
+        if let last = lastNetworkSample {
+            let elapsed = last.time.duration(to: now)
+            let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            let rate = NetworkRate(from: last.totals, to: totals, seconds: seconds)
+            networkRate = rate
+            networkInHistory = Self.appending(rate.receivedPerSecond, to: networkInHistory)
+            networkOutHistory = Self.appending(rate.sentPerSecond, to: networkOutHistory)
+        }
+        networkTotals = totals
+        lastNetworkSample = (totals, now)
     }
 
     private static func appending(_ value: Double, to history: [Double]) -> [Double] {

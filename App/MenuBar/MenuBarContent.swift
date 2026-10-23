@@ -30,6 +30,15 @@ struct MenuBarContent: View {
                     .foregroundStyle(Palette.slate)
             }
 
+            HStack(spacing: 4) {
+                Text("Ağ").eyebrowStyle()
+                Spacer()
+                Text(networkText)
+                    .font(.keelMono(12, .semibold))
+                    .foregroundStyle(Palette.text)
+            }
+            .accessibilityElement(children: .combine)
+
             Divider()
 
             Button("Keel'i aç") {
@@ -49,6 +58,15 @@ struct MenuBarContent: View {
         .frame(width: 260)
         .background(Palette.raised)
         .preferredColorScheme(.dark)
+    }
+
+    /// "↓ 1,2 MB/sn  ↑ 80 KB/sn"
+    private var networkText: String {
+        guard let rate = status.networkRate else { return "—" }
+        func speed(_ value: Double) -> String {
+            value < 1_000 ? "\(Int(value)) B/sn" : ByteFormat.string(Int64(value)) + "/sn"
+        }
+        return "↓ \(speed(rate.receivedPerSecond))  ↑ \(speed(rate.sentPerSecond))"
     }
 }
 
