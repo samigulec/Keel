@@ -1,11 +1,12 @@
 import SwiftUI
 
 /// The little helpers from the design, one per section: Kee (Akıllı Tarama),
-/// Puf (Temizlik), Zip (Performans), Blok (Uygulamalar) and Bilge (Keel AI).
+/// Puf (Temizlik), Zip (Performans), Blok (Uygulamalar), Kutu (Büyük
+/// Dosyalar) and Bilge (Keel AI).
 /// Drawn on the design's 64×64 grid so they stay sharp at any size.
 struct Mascot: View {
     enum Character {
-        case kee, puf, zip, blok, bilge
+        case kee, puf, zip, blok, kutu, bilge
     }
 
     let character: Character
@@ -19,6 +20,7 @@ struct Mascot: View {
             case .puf: Self.drawPuf(in: &context)
             case .zip: Self.drawZip(in: &context)
             case .blok: Self.drawBlok(in: &context)
+            case .kutu: Self.drawKutu(in: &context)
             case .bilge: Self.drawBilge(in: &context)
             }
         }
@@ -85,6 +87,21 @@ struct Mascot: View {
         highlight(in: &context, center: CGPoint(x: 19, y: 22), radii: CGSize(width: 6, height: 3), degrees: 0)
         var lowered = context
         lowered.translateBy(x: 0, y: 1)
+        face(in: &lowered)
+    }
+
+    /// A cardboard box holding big things, its lid a little open.
+    private static func drawKutu(in context: inout GraphicsContext) {
+        let rect = CGRect(x: 9, y: 22, width: 46, height: 35)
+        context.fill(Path(roundedRect: rect, cornerRadius: 7), with: gradient(0xFFC46B, 0xF0782F, in: rect))
+        var lid = context
+        lid.translateBy(x: 32, y: 17)
+        lid.rotate(by: .degrees(-6))
+        lid.fill(Path(roundedRect: CGRect(x: -26, y: -6, width: 52, height: 11), cornerRadius: 4), with: .color(Color(hex: 0xFFE08A)))
+        context.fill(Path(roundedRect: CGRect(x: 29, y: 22, width: 6, height: 9), cornerRadius: 1.5), with: .color(Color(hex: 0xFFF6C2).opacity(0.8)))
+        highlight(in: &context, center: CGPoint(x: 19, y: 28), radii: CGSize(width: 6, height: 3), degrees: 0)
+        var lowered = context
+        lowered.translateBy(x: 0, y: 2)
         face(in: &lowered)
     }
 
@@ -159,6 +176,7 @@ extension AppSection {
         case .cleanup: .puf
         case .performance: .zip
         case .applications: .blok
+        case .largeFiles: .kutu
         case .assistant: .bilge
         }
     }

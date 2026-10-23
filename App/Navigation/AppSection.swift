@@ -4,6 +4,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case cleanup
     case performance
     case applications
+    case largeFiles
     case assistant
 
     var id: String { rawValue }
@@ -14,6 +15,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .cleanup: "Temizlik"
         case .performance: "Performans"
         case .applications: "Uygulamalar"
+        case .largeFiles: "Büyük Dosyalar"
         case .assistant: "Keel AI"
         }
     }
@@ -21,7 +23,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     /// The roadmap phase that ships this section (see docs/PLAN.md).
     var phase: Int {
         switch self {
-        case .smartScan, .cleanup, .performance, .applications, .assistant: 1
+        case .smartScan, .cleanup, .performance, .applications, .largeFiles, .assistant: 1
         }
     }
 }

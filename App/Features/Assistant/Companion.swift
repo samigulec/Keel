@@ -123,6 +123,8 @@ enum CompanionContext {
                 return ["\(app.name) uygulamasını kaldırmalı mıyım?", "\(app.name) neden bu kadar yer kaplıyor?", "Hangi uygulamaları kaldırabilirim?"]
             }
             return ["Hangi uygulamaları kaldırabilirim?", "Hangi uygulamalar Intel, sorun olur mu?", "En çok yer kaplayan uygulamalar hangileri?"]
+        case .largeFiles:
+            return ["Bu dosyalardan hangilerini silebilirim?", "İndirilenler klasörümü nasıl toparlarım?", "Disk görüntüleri (.dmg) silinebilir mi?"]
         case .assistant:
             return AssistantModel.suggestions
         }
@@ -131,9 +133,18 @@ enum CompanionContext {
     static func screen(
         for section: AppSection,
         applications: ApplicationsModel,
-        cleanup: CleanupModel
+        cleanup: CleanupModel,
+        largeFiles: LargeFilesModel
     ) -> ScreenContext {
         switch section {
+        case .largeFiles:
+            let chosen = largeFiles.selectedFiles
+            guard !chosen.isEmpty else {
+                return ScreenContext(section: section, detail: "\(largeFiles.visibleFiles.count) files shown.")
+            }
+            let names = chosen.prefix(8).map { "\($0.url.lastPathComponent) (\(ByteFormat.string($0.sizeBytes)), \(FileText.lastOpened($0.lastActivity)))" }
+            return ScreenContext(section: section, detail: "Selected files: " + names.joined(separator: "; ") + ".")
+
         case .applications:
             guard let entry = applications.focused else {
                 return ScreenContext(section: section, detail: "Filter: \(applications.filter.title).")

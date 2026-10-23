@@ -272,6 +272,7 @@ enum KeelContext {
         cleanup: CleanupModel,
         performance: PerformanceModel,
         applications: ApplicationsModel,
+        largeFiles: LargeFilesModel,
         report: (AssistantEvent) -> Void
     ) async -> JSONValue {
         func step(_ name: String, _ work: () async -> JSONValue) async -> JSONValue {
@@ -297,6 +298,10 @@ enum KeelContext {
         if !performance.launchItemsLoaded {
             await performance.refreshLaunchItems()
         }
+        // Scanning the home folder is slow; share it only once the user has scanned.
+        let bigFiles: JSONValue = largeFiles.phase == .ready
+            ? KeelTools.largeFilesSummary(largeFiles.files, compact: true)
+            : .string("not scanned yet")
         let installed = await step("get_installed_apps") {
             KeelTools.installedApps(await applications.listWhenReady(), compact: true)
         }
@@ -307,6 +312,7 @@ enum KeelContext {
             "top_memory_apps": apps,
             "background_services": KeelTools.backgroundServices(performance, compact: true),
             "installed_apps": installed,
+            "large_files": bigFiles,
         ]
     }
 

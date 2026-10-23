@@ -39,6 +39,7 @@ enum KeelTools {
         "get_top_memory_apps": "Uygulamaların bellek kullanımı",
         "get_background_services": "Arka plan servisleri",
         "get_installed_apps": "Yüklü uygulamalar",
+        "get_large_files": "Büyük dosyalar",
         "propose_cleanup": "Temizlik önerisi",
     ]
 
@@ -49,6 +50,7 @@ enum KeelTools {
         cleanup: CleanupModel,
         performance: PerformanceModel,
         applications: ApplicationsModel,
+        largeFiles: LargeFilesModel,
         compact: Bool = false,
         propose: @escaping @MainActor (CleanupProposal) -> Void
     ) -> [AITool] {
@@ -88,6 +90,15 @@ enum KeelTools {
             ) { _ in
                 let apps = await applications.listWhenReady()
                 return installedApps(apps, compact: compact).encodedString()
+            },
+
+            AITool(
+                name: "get_large_files",
+                description: "Lists the largest files in the user's own folders (Desktop, Documents, Downloads and so on; not Library or apps) with size, folder, kind and when each was last opened. Takes a while the first time. Call this when the user asks what takes up space in their files, about old downloads, videos or disk images. Keel AI cannot remove them; point the user to Keel's Büyük Dosyalar section.",
+                inputSchema: noInput
+            ) { _ in
+                let files = await largeFiles.filesWhenReady()
+                return largeFilesSummary(files, compact: compact).encodedString()
             },
 
             AITool(
@@ -177,6 +188,27 @@ enum KeelTools {
     }
 
     // MARK: - Summaries
+
+    static func largeFilesSummary(_ files: [LargeFile], compact: Bool = false) -> JSONValue {
+        let now = Date()
+        let shown = files.prefix(compact ? 6 : 20)
+        let list: [JSONValue] = shown.map { file in
+            let days: JSONValue = file.lastActivity.map { .number(Double(Int(now.timeIntervalSince($0) / 86_400))) } ?? .null
+            return .object([
+                "name": .string(file.url.lastPathComponent),
+                "folder": .string(FileText.folder(file.url)),
+                "size_mb": .number(Double(file.sizeBytes / 1_000_000)),
+                "kind": .string(file.kind.rawValue),
+                "days_since_opened": days,
+            ])
+        }
+        let total = files.reduce(0) { $0 + $1.sizeBytes }
+        return .object([
+            "count_over_50_mb": .number(Double(files.count)),
+            "total_gb": .number((Double(total) / 1e8).rounded() / 10),
+            "largest": .array(list),
+        ])
+    }
 
     static func installedApps(_ apps: [AppEntry], compact: Bool = false) -> JSONValue {
         let now = Date()

@@ -4,6 +4,7 @@ struct RootView: View {
     @Environment(AssistantModel.self) private var assistant
     @Environment(ApplicationsModel.self) private var applications
     @Environment(CleanupModel.self) private var cleanup
+    @Environment(LargeFilesModel.self) private var largeFiles
     @State private var selection: AppSection = .smartScan
     /// Keel AI beside the current screen; remembered between launches.
     @AppStorage("keel.companion.open") private var companionOpen = false
@@ -72,7 +73,7 @@ struct RootView: View {
     /// What Keel AI should know about the screen; none on its own tab.
     private var screen: ScreenContext? {
         guard selection != .assistant else { return nil }
-        return CompanionContext.screen(for: selection, applications: applications, cleanup: cleanup)
+        return CompanionContext.screen(for: selection, applications: applications, cleanup: cleanup, largeFiles: largeFiles)
     }
 
     private func toggleCompanion() {
@@ -90,6 +91,8 @@ struct RootView: View {
             PerformanceView()
         case .applications:
             ApplicationsView()
+        case .largeFiles:
+            LargeFilesView()
         default:
             ComingSoonView(section: selection)
         }

@@ -76,11 +76,19 @@ final class AssistantModel {
     private let cleanup: CleanupModel
     private let performance: PerformanceModel
     private let applications: ApplicationsModel
+    private let largeFiles: LargeFilesModel
     @ObservationIgnored private var session: (any ChatSession)?
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private var chatID = UUID()
 
-    init(status: SystemStatus, cleanup: CleanupModel, performance: PerformanceModel, applications: ApplicationsModel) {
+    init(
+        status: SystemStatus,
+        cleanup: CleanupModel,
+        performance: PerformanceModel,
+        applications: ApplicationsModel,
+        largeFiles: LargeFilesModel
+    ) {
+        self.largeFiles = largeFiles
         self.status = status
         self.cleanup = cleanup
         self.performance = performance
@@ -185,7 +193,8 @@ final class AssistantModel {
         let chat = chatID
         let isOnDevice = connection.kind == .apple
         let tools = KeelTools.make(
-            status: status, cleanup: cleanup, performance: performance, applications: applications, compact: isOnDevice
+            status: status, cleanup: cleanup, performance: performance, applications: applications,
+            largeFiles: largeFiles, compact: isOnDevice
         ) { [weak self] proposal in
             guard let self, self.chatID == chat else { return }
             self.items.append(ChatItem(kind: .proposal(proposal)))
@@ -210,9 +219,10 @@ final class AssistantModel {
                 kind: connection.kind,
                 model: connection.usesAccountDefault ? nil : connection.model,
                 effort: connection.effort,
-                gatherContext: { [status, cleanup, performance, applications] report in
+                gatherContext: { [status, cleanup, performance, applications, largeFiles] report in
                     await KeelContext.gather(
-                        status: status, cleanup: cleanup, performance: performance, applications: applications, report: report
+                        status: status, cleanup: cleanup, performance: performance, applications: applications,
+                        largeFiles: largeFiles, report: report
                     )
                 },
                 propose: { input in
