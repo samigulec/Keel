@@ -19,6 +19,20 @@ struct ChatItem: Identifiable {
     var isFailed = false
 }
 
+/// What the user is looking at in Keel, so Keel AI knows what "this" means.
+struct ScreenContext: Equatable {
+    let section: AppSection
+    /// e.g. "Seçili uygulama: Zoom, 1,2 GB, 214 gün önce kullanıldı"
+    var detail: String?
+
+    /// Sent before the user's message; the chat shows only the message.
+    var note: String {
+        var text = "The user is on Keel's \(section.title) screen."
+        if let detail { text += " " + detail }
+        return "<keel_screen>\(text)</keel_screen>"
+    }
+}
+
 /// Running totals for the line under the chat box.
 struct ChatStats: Equatable {
     var model: String?
@@ -44,6 +58,9 @@ final class AssistantModel {
     private(set) var appliedProposals: [UUID: Int64] = [:]
     private(set) var stats = ChatStats()
     var draft = ""
+    /// The screen the user is on when they write from the companion panel;
+    /// nil on the Keel AI tab itself.
+    @ObservationIgnored var screen: ScreenContext?
 
     static let suggestions = [
         "Bilgisayarım neden yavaş?",
@@ -130,10 +147,11 @@ final class AssistantModel {
         items.append(ChatItem(kind: .user, text: message))
         isRunning = true
         let chat = chatID
+        let prompt = screen.map { "\($0.note)\n\n\(message)" } ?? message
         runTask = Task {
             do {
                 let session = try await currentSession()
-                try await session.send(message) { [weak self] event in
+                try await session.send(prompt) { [weak self] event in
                     guard let self, self.chatID == chat else { return }
                     self.handle(event)
                 }
@@ -349,6 +367,7 @@ final class AssistantModel {
     - Write for someone who is not an expert. Keep answers short, and use short bullet lists for steps.
     - Answer in the language the user writes in.
     - Privacy: you only receive the summaries Keel's tools return (sizes, app and folder names, readings). You never see file contents.
+    - A message may start with <keel_screen>: the Keel screen the user is on and what they selected there. Use it to understand what "this" or "bu" refers to; do not repeat the tag.
     """
 
     /// The on-device model has a small context window; ask for short answers.

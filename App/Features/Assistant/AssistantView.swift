@@ -25,7 +25,16 @@ struct AssistantView: View {
                     .frame(width: 300)
             }
         }
-        .confirmationDialog(
+    }
+}
+
+/// Asks before a cleanup Keel AI suggested is applied. Attached once at the
+/// window's root, so it works from the Keel AI tab and the companion panel.
+struct CleanupConfirmation: ViewModifier {
+    @Environment(AssistantModel.self) private var model
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
             "\(ByteFormat.string(model.pendingBytes)) temizlensin mi?",
             isPresented: Binding(
                 get: { model.pendingCleanup != nil },
@@ -107,8 +116,11 @@ private struct PrivacyNote: View {
 
 // MARK: - Conversation
 
-private struct Conversation: View {
+/// The messages. `compact` fits the companion panel beside other screens.
+struct Conversation: View {
     @Environment(AssistantModel.self) private var model
+    var compact = false
+    var suggestions: [String] = AssistantModel.suggestions
 
     /// Consecutive tool calls are shown together as one row of chips.
     private enum Row: Identifiable {
@@ -128,7 +140,7 @@ private struct Conversation: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     if model.items.isEmpty {
-                        EmptyChat()
+                        EmptyChat(suggestions: suggestions, compact: compact)
                     }
                     ForEach(rows) { row in
                         switch row {
@@ -149,7 +161,7 @@ private struct Conversation: View {
                     }
                     Color.clear.frame(height: 1).id("end")
                 }
-                .padding(24)
+                .padding(compact ? 16 : 24)
             }
             .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
@@ -389,7 +401,7 @@ private struct ProposalCard: View {
 
 // MARK: - Empty states
 
-private struct ConnectCard: View {
+struct ConnectCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 14) {
@@ -416,18 +428,20 @@ private struct ConnectCard: View {
 
 private struct EmptyChat: View {
     @Environment(AssistantModel.self) private var model
+    let suggestions: [String]
+    var compact = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Ne öğrenmek istersin?")
-                .font(.keel(18, .extraBold))
+            Text(compact ? "Nasıl yardımcı olayım?" : "Ne öğrenmek istersin?")
+                .font(.keel(compact ? 16 : 18, .extraBold))
                 .foregroundStyle(Palette.text)
             Text("Keel AI bilgisayarının gerçek durumuna bakarak yanıt verir: bellek, işlemci, disk, pil ve temizlenebilir alan.")
                 .font(.keel(14, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)
             FlowLayout(spacing: 8) {
-                ForEach(AssistantModel.suggestions, id: \.self) { suggestion in
+                ForEach(suggestions, id: \.self) { suggestion in
                     Button(suggestion) { model.send(suggestion) }
                         .buttonStyle(.plain)
                         .font(.keel(13, .semibold))
@@ -446,7 +460,7 @@ private struct EmptyChat: View {
 // MARK: - Composer
 
 /// The message box with the model picker, effort and usage above it.
-private struct Composer: View {
+struct Composer: View {
     @Environment(AssistantModel.self) private var model
 
     var body: some View {
