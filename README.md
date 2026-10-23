@@ -7,6 +7,27 @@ performans takibi, uygulama kaldırma. Swift 6 + SwiftUI, macOS 14 Sonoma ve üz
 
 Plan ve yol haritası: [docs/PLAN.md](docs/PLAN.md)
 
+## İndir ve kur
+
+1. [Son sürüm sayfasından](https://github.com/samigulec/Keel/releases/latest)
+   **Keel-x.y.z.dmg** dosyasını indir ve aç.
+2. **Keel**'i **Applications** (Uygulamalar) klasörüne sürükle.
+3. Keel henüz Apple Developer ID ile imzalı olmadığından macOS ilk açılışta
+   uyarır. Bir kez açmayı dene, uyarıyı kapat; sonra **Sistem Ayarları →
+   Gizlilik ve Güvenlik**'te Keel için **Yine de Aç**'a bas. Olmazsa
+   Terminal'de:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Keel.app
+   ```
+
+macOS 14 Sonoma veya üstü; Apple silicon ve Intel Mac'lerde çalışır.
+Keel AI için kendi ChatGPT (Codex) veya Claude (Claude Code) hesabın ya da
+macOS 26'da Apple Intelligence yeterli; uygulama kurulumu kendisi anlatır.
+
+Yeni sürüm yayınlamak: GitHub'da **Actions → Release → Run workflow**,
+sürüm numarasını yaz. Ya da `v0.2.0` gibi bir etiket gönder.
+
 ## Geliştirme
 
 Gereksinimler: Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
