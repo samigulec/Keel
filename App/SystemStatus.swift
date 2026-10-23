@@ -129,12 +129,14 @@ final class SystemStatus {
         // the next one from starting until it ends.
         guard !thermalsBusy else { return }
         thermalsBusy = true
+        let reading = Task.detached(priority: .utility) { SensorReader.snapshot() }
+        Task { [weak self] in
+            _ = await reading.value
+            self?.thermalsBusy = false
+        }
         let snapshot: ThermalSnapshot? = await withCheckedContinuation { continuation in
             let answer = FirstAnswer(continuation)
-            Task.detached(priority: .utility) { [weak self] in
-                answer.resume(SensorReader.snapshot())
-                await MainActor.run { self?.thermalsBusy = false }
-            }
+            Task.detached { answer.resume(await reading.value) }
             Task.detached {
                 try? await Task.sleep(for: .seconds(3))
                 answer.resume(nil)
