@@ -278,14 +278,22 @@ enum KeelTools {
         if let thermals = status.thermals {
             var sensors: [String: JSONValue] = [:]
             for summary in thermals.summaries {
-                sensors[summary.group.rawValue] = ["hottest_c": .number(summary.hottest.rounded()), "average_c": .number(summary.average.rounded())]
+                let reading: [String: JSONValue] = [
+                    "hottest_c": .number(summary.hottest.rounded()),
+                    "average_c": .number(summary.average.rounded()),
+                ]
+                sensors[summary.group.rawValue] = .object(reading)
             }
             result["temperatures"] = .object(sensors)
-            result["fans"] = thermals.hasFans
-                ? .array(thermals.fans.map { fan in
-                    ["rpm": .number(fan.rpm.rounded()), "max_rpm": fan.maximumRPM.map { .number($0.rounded()) } ?? .null]
-                })
-                : "none (fanless Mac)"
+            if thermals.hasFans {
+                let fans: [JSONValue] = thermals.fans.map { fan in
+                    let maximum: JSONValue = fan.maximumRPM.map { JSONValue.number($0.rounded()) } ?? .null
+                    return .object(["rpm": .number(fan.rpm.rounded()), "max_rpm": maximum])
+                }
+                result["fans"] = .array(fans)
+            } else {
+                result["fans"] = .string("none (fanless Mac)")
+            }
         }
 
         var cpu: [String: JSONValue] = ["usage_percent": status.cpuUsage.map(percent) ?? .null]
