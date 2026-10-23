@@ -5,18 +5,19 @@ import Testing
 @Suite("Large files")
 struct LargeFilesTests {
     func scanner(_ sandbox: Sandbox) -> LargeFileScanner {
-        LargeFileScanner(home: sandbox.home, minimumBytes: 1_000, lastActivity: FileActivity.modificationDate(of:))
+        // Above the 4 KB block a tiny file takes on APFS.
+        LargeFileScanner(home: sandbox.home, minimumBytes: 40_000, lastActivity: FileActivity.modificationDate(of:))
     }
 
     @Test func findsBigFilesOutsideLibraryAndPackages() throws {
         let sandbox = try Sandbox()
-        try sandbox.write("Downloads/movie.mov", bytes: 5_000)
-        try sandbox.write("Documents/Projects/backup.zip", bytes: 3_000)
+        try sandbox.write("Downloads/movie.mov", bytes: 90_000)
+        try sandbox.write("Documents/Projects/backup.zip", bytes: 60_000)
         try sandbox.write("Documents/small.txt", bytes: 10)
-        try sandbox.write("Library/Caches/big.bin", bytes: 9_000)
-        try sandbox.write("Applications/Tool.app/Contents/big", bytes: 9_000)
-        try sandbox.write(".hidden/big", bytes: 9_000)
-        try sandbox.write("Documents/Thing.app/Contents/big", bytes: 9_000)
+        try sandbox.write("Library/Caches/big.bin", bytes: 99_000)
+        try sandbox.write("Applications/Tool.app/Contents/big", bytes: 99_000)
+        try sandbox.write(".hidden/big", bytes: 99_000)
+        try sandbox.write("Documents/Thing.app/Contents/big", bytes: 99_000)
 
         let files = scanner(sandbox).scan()
 

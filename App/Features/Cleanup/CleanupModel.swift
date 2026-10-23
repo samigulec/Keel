@@ -41,6 +41,11 @@ final class CleanupModel {
         results.filter(\.category.selectedByDefault).reduce(0) { $0 + $1.totalBytes }
     }
 
+    /// Ticks exactly the preselected categories that have something in them.
+    func selectRecommended() {
+        selection = Set(results.filter { $0.category.selectedByDefault && !$0.items.isEmpty }.map(\.category.id))
+    }
+
     /// Found in categories the user must opt into (Trash, old downloads).
     var optInBytes: Int64 { totalBytes - recommendedBytes }
 

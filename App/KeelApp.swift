@@ -9,6 +9,7 @@ struct KeelApp: App {
     @State private var performance: PerformanceModel
     @State private var applications: ApplicationsModel
     @State private var largeFiles: LargeFilesModel
+    @State private var smartCare: SmartCareModel
     @State private var assistant: AssistantModel
 
     init() {
@@ -22,6 +23,9 @@ struct KeelApp: App {
         _applications = State(initialValue: applications)
         let largeFiles = LargeFilesModel(status: status)
         _largeFiles = State(initialValue: largeFiles)
+        _smartCare = State(initialValue: SmartCareModel(
+            status: status, cleanup: cleanup, applications: applications, largeFiles: largeFiles, performance: performance
+        ))
         _assistant = State(initialValue: AssistantModel(
             status: status, cleanup: cleanup, performance: performance, applications: applications, largeFiles: largeFiles
         ))
@@ -35,6 +39,7 @@ struct KeelApp: App {
                 .environment(performance)
                 .environment(applications)
                 .environment(largeFiles)
+                .environment(smartCare)
                 .environment(assistant)
                 .frame(minWidth: 980, minHeight: 640)
         }

@@ -84,7 +84,7 @@ struct RootView: View {
     private var detail: some View {
         switch selection {
         case .smartScan:
-            SmartScanView(openCleanup: { selection = .cleanup })
+            SmartScanView(navigate: { selection = $0 })
         case .cleanup:
             CleanupView()
         case .performance:
