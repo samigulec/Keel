@@ -119,3 +119,48 @@ struct LaunchItemScannerTests {
         #expect(LaunchItemScanner.items(in: sandbox.home.appendingPathComponent("nope"), scope: .user).isEmpty)
     }
 }
+
+@Suite("Network and process CPU")
+struct NetworkAndProcessTests {
+    @Test func networkTotalsFromProcNetDev() {
+        let text = """
+        Inter-|   Receive                                                |  Transmit
+         face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+            lo: 9000      10    0    0    0     0          0         0     9000      10    0    0    0     0       0          0
+          eth0: 1500000   900    0    0    0     0          0         0   250000     700    0    0    0     0       0          0
+         wlan0:  500000   100    0    0    0     0          0         0    50000     100    0    0    0     0       0          0
+        """
+        #expect(NetworkReader.parseProcNetDev(text) == NetworkTotals(received: 2_000_000, sent: 300_000))
+    }
+
+    @Test func networkRateIgnoresCountersThatWentBack() {
+        let rate = NetworkRate(from: NetworkTotals(received: 1_000, sent: 5_000), to: NetworkTotals(received: 3_000, sent: 4_000), seconds: 2)
+        #expect(rate.receivedPerSecond == 1_000)
+        #expect(rate.sentPerSecond == 0)
+    }
+
+    @Test func liveNetworkTotalsAreReadable() {
+        // Containers may have no counted interface; only check it does not crash.
+        _ = NetworkReader.totals()
+        _ = NetworkReader.primaryAddress()
+    }
+
+    @Test func busiestProcessesBetweenSamples() {
+        let old = [
+            ProcessCPUTime(pid: 1, name: "kernel_task", nanoseconds: 10_000_000_000),
+            ProcessCPUTime(pid: 20, name: "Safari", nanoseconds: 1_000_000_000),
+            ProcessCPUTime(pid: 30, name: "Ended", nanoseconds: 5_000_000_000),
+        ]
+        let new = [
+            ProcessCPUTime(pid: 1, name: "kernel_task", nanoseconds: 10_500_000_000),
+            ProcessCPUTime(pid: 20, name: "Safari", nanoseconds: 4_000_000_000),
+            ProcessCPUTime(pid: 40, name: "New", nanoseconds: 1_000_000_000),
+            ProcessCPUTime(pid: 50, name: "Idle", nanoseconds: 0),
+        ]
+        let usage = ProcessCPU.usage(from: old, to: new, elapsed: .seconds(2))
+
+        #expect(usage.map(\.name) == ["Safari", "New", "kernel_task"])
+        #expect(usage.map(\.coreFraction) == [1.5, 0.5, 0.25])
+        #expect(ProcessCPU.usage(from: old, to: new, elapsed: .zero).isEmpty)
+    }
+}
