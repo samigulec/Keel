@@ -23,6 +23,16 @@ final class PerformanceModel {
 
     static let topAppCount = 8
 
+    @ObservationIgnored private var quitObserver: (any NSObjectProtocol)?
+
+    init() {
+        quitObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handBackFansOnQuit() }
+        }
+    }
+
     /// Items that start by themselves: they run at load or are kept alive, and are not disabled.
     var activeLaunchItems: [LaunchItem] {
         launchItems.filter { ($0.runsAtLoad || $0.keepsAlive) && !$0.isDisabled }
@@ -148,6 +158,38 @@ final class PerformanceModel {
     private(set) var fanMessage: String?
     /// The last setting Keel applied; macOS resets fans to automatic on restart.
     private(set) var fanSetting: FanSetting?
+
+    /// The fan helper lets Keel change the fans without a password.
+    private(set) var helperInstalled = SystemControl.helperInstalled
+    private(set) var helperBusy = false
+
+    func installHelper() async {
+        helperBusy = true
+        let outcome = await SystemControl.installHelper()
+        helperInstalled = SystemControl.helperInstalled
+        if let error = outcome.errorMessage {
+            fanMessage = "Yardımcı kurulamadı: \(error)"
+        } else if helperInstalled {
+            fanMessage = "Fan yardımcısı kuruldu; artık şifre sorulmayacak."
+        }
+        helperBusy = false
+    }
+
+    func uninstallHelper() async {
+        helperBusy = true
+        let outcome = await SystemControl.uninstallHelper()
+        helperInstalled = SystemControl.helperInstalled
+        if let error = outcome.errorMessage { fanMessage = "Yardımcı kaldırılamadı: \(error)" }
+        helperBusy = false
+    }
+
+    /// Fans Keel set by hand go back to macOS when Keel quits, as other fan
+    /// apps do. Without the helper that would ask for a password, so then
+    /// they stay until a restart.
+    private func handBackFansOnQuit() {
+        guard case .fixed? = fanSetting, SystemControl.helperInstalled else { return }
+        SystemControl.writeRequest(FanHelper.Request(id: UUID().uuidString, setting: .automatic))
+    }
 
     @discardableResult
     func setFans(_ setting: FanSetting) async -> SystemControl.Outcome {

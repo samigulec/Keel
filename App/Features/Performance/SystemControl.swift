@@ -109,7 +109,10 @@ enum SystemControl {
 
     // MARK: Fans
 
+    /// Through the fan helper when it is installed (no password), otherwise
+    /// behind the administrator prompt.
     static func setFans(_ setting: FanSetting) async -> Outcome {
+        if helperInstalled { return await requestFans(setting) }
         guard let executable = Bundle.main.executablePath else { return .failed("Keel'in kendi yolu bulunamadı.") }
         let command = ShellCommand.join([executable, FanCommand.flag, setting.argument])
         let prompt = switch setting {
@@ -117,5 +120,56 @@ enum SystemControl {
         case .fixed(let percent): "Keel fanları en yüksek hızın %\(percent)'ine ayarlamak istiyor."
         }
         return await runAsAdministrator(command, prompt: prompt)
+    }
+
+    // MARK: Fan helper
+
+    /// Installed, and the version this Keel expects.
+    static var helperInstalled: Bool {
+        FileManager.default.fileExists(atPath: FanHelper.plistPath)
+            && FileManager.default.isExecutableFile(atPath: FanHelper.executable)
+            && (try? String(contentsOfFile: FanHelper.versionFile, encoding: .utf8)) == String(FanHelper.version)
+    }
+
+    /// Installed by an older Keel; installing again updates it.
+    static var helperOutdated: Bool {
+        FileManager.default.fileExists(atPath: FanHelper.plistPath) && !helperInstalled
+    }
+
+    static func installHelper() async -> Outcome {
+        guard let executable = Bundle.main.executablePath else { return .failed("Keel'in kendi yolu bulunamadı.") }
+        return await runAsAdministrator(
+            FanHelper.installScript(from: executable, userID: getuid()),
+            prompt: "Keel, fanları her seferinde şifre sormadan ayarlayabilmek için bir yardımcı kurmak istiyor."
+        )
+    }
+
+    static func uninstallHelper() async -> Outcome {
+        await runAsAdministrator(FanHelper.uninstallScript(), prompt: "Keel fan yardımcısını kaldırmak istiyor.")
+    }
+
+    /// Leaves a request for the helper and waits for its answer.
+    static func requestFans(_ setting: FanSetting) async -> Outcome {
+        let request = FanHelper.Request(id: UUID().uuidString, setting: setting)
+        guard writeRequest(request) else {
+            return .failed("Fan yardımcısına ulaşılamadı. Ayarlar'dan yeniden kurmayı dene.")
+        }
+        // The helper waits a few seconds to check that macOS kept the setting.
+        let deadline = ContinuousClock.now + .seconds(30)
+        while ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(300))
+            if let status = (try? String(contentsOfFile: FanHelper.statusFile, encoding: .utf8)).flatMap(FanHelper.Status.init(text:)),
+               status.id == request.id {
+                let text = status.lines.joined(separator: "\n")
+                return status.succeeded ? .done(text) : .failed(text.isEmpty ? "Fanlar ayarlanamadı." : text)
+            }
+        }
+        return .failed("Fan yardımcısı yanıt vermedi. Ayarlar'dan yeniden kurmayı dene.")
+    }
+
+    /// Writes the request without waiting, e.g. while Keel quits.
+    @discardableResult
+    static func writeRequest(_ request: FanHelper.Request) -> Bool {
+        (try? Data(request.line.utf8).write(to: URL(fileURLWithPath: FanHelper.requestFile), options: .atomic)) != nil
     }
 }

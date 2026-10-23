@@ -6,6 +6,7 @@ import SwiftUI
 /// Keel's preferences window (⌘,).
 struct SettingsView: View {
     @Environment(AssistantModel.self) private var assistant
+    @Environment(PerformanceModel.self) private var performance
     @AppStorage(Preference.menuBarVisible) private var menuBarVisible = true
     @AppStorage(Preference.companionButtonVisible) private var companionButtonVisible = true
     @AppStorage(Preference.saveChatHistory) private var saveChatHistory = true
@@ -32,6 +33,32 @@ struct SettingsView: View {
                 Text("İşlemci, bellek, disk, sıcaklık ve ağ menü çubuğundaki pencerede görünür.")
                     .font(.keel(12, .medium))
                     .foregroundStyle(Palette.slate)
+            }
+
+            Section("Fanlar") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Fan yardımcısı")
+                        Text(performance.helperInstalled
+                            ? "Kurulu: fanlar şifre sormadan ayarlanır, Keel kapanınca otomatiğe döner."
+                            : "Kurulu değil: her fan değişikliği yönetici şifresi ister.")
+                            .font(.keel(12, .medium))
+                            .foregroundStyle(Palette.slate)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    if performance.helperBusy {
+                        ProgressView().controlSize(.small)
+                    } else if performance.helperInstalled {
+                        Button("Kaldır") { Task { await performance.uninstallHelper() } }
+                    } else {
+                        Button("Kur") { Task { await performance.installHelper() } }
+                    }
+                }
+                Text("Yardımcı yalnızca fan hızını değiştirebilir; başka hiçbir şeye dokunmaz. Kurmak ve kaldırmak bir kez yönetici şifresi ister.")
+                    .font(.keel(12, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Keel AI") {
@@ -71,7 +98,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .font(.keel(13, .medium))
-        .frame(width: 520, height: 560)
+        .frame(width: 520, height: 640)
         .scrollContentBackground(.hidden)
         .background(Palette.raised)
         .preferredColorScheme(.dark)

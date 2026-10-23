@@ -35,9 +35,15 @@ struct PerformanceView: View {
         ThermalCard(thermals: status.thermals, cpuHistory: status.cpuTemperatureHistory)
     }
     private var fansCard: some View {
-        FansCard(thermals: status.thermals, busy: model.fanBusy, message: model.fanMessage, applied: model.fanSetting) { setting in
-            Task { await model.setFans(setting) }
-        }
+        FansCard(
+            thermals: status.thermals,
+            busy: model.fanBusy || model.helperBusy,
+            message: model.fanMessage,
+            applied: model.fanSetting,
+            helperInstalled: model.helperInstalled,
+            set: { setting in Task { await model.setFans(setting) } },
+            installHelper: { Task { await model.installHelper() } }
+        )
     }
 
     var body: some View {
@@ -607,7 +613,9 @@ private struct FansCard: View {
     let busy: Bool
     let message: String?
     let applied: FanSetting?
+    let helperInstalled: Bool
     let set: @MainActor (FanSetting) -> Void
+    let installHelper: @MainActor () -> Void
 
     /// Fixed speeds offered, as shares of each fan's maximum. Lower ones are
     /// left out: they would only keep the Mac warmer than macOS would.
@@ -668,12 +676,30 @@ private struct FansCard: View {
                     .foregroundStyle(Palette.subtle)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(manual
-                ? "Fanlar elle ayarlı. Otomatik'e basana ya da Mac yeniden başlayana kadar böyle kalır."
-                : "Apple silicon Mac'lerde fanlar yük artana kadar çoğu zaman durur; bu normaldir. Hızlandırmak yönetici şifresi ister.")
+            Text(note(manual: manual))
                 .font(.keel(11, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)
+            if !helperInstalled {
+                HStack(spacing: 10) {
+                    Text("Her değişiklikte şifre sorulmasın mı?")
+                        .font(.keel(12, .semibold))
+                        .foregroundStyle(Palette.subtle)
+                    Button("Yardımcıyı kur", action: installHelper)
+                        .buttonStyle(TileButtonStyle())
+                        .disabled(busy)
+                        .help("Bir kez yönetici şifresi ister. Ayarlar'dan kaldırılabilir.")
+                }
+            }
+        }
+    }
+
+    private func note(manual: Bool) -> String {
+        switch (manual, helperInstalled) {
+        case (true, true): "Fanlar elle ayarlı. Otomatik'e basınca ya da Keel kapanınca macOS'e döner."
+        case (true, false): "Fanlar elle ayarlı. Otomatik'e basana ya da Mac yeniden başlayana kadar böyle kalır."
+        case (false, true): "Apple silicon Mac'lerde fanlar yük artana kadar çoğu zaman durur; bu normaldir."
+        case (false, false): "Apple silicon Mac'lerde fanlar yük artana kadar çoğu zaman durur; bu normaldir. Hızlandırmak yönetici şifresi ister."
         }
     }
 

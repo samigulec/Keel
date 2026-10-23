@@ -37,6 +37,9 @@ targets:
         INFOPLIST_FILE: Support/Info.plist
         CODE_SIGN_ENTITLEMENTS: Support/Keel.entitlements
         ENABLE_HARDENED_RUNTIME: YES
+        # One self-contained executable: the fan helper is a copy of it, so a
+        # Debug build must not split the code into a separate debug dylib.
+        ENABLE_DEBUG_DYLIB: NO
         # Local development: "Sign to Run Locally". Developer ID comes with Phase 4.
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"

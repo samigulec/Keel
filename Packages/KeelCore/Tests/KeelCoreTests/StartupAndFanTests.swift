@@ -115,3 +115,37 @@ struct FanControlTests {
         #expect(FanMath.encode(1, type: "sp78") == nil)
     }
 }
+
+@Suite("Fan helper")
+struct FanHelperTests {
+    @Test func requestsRoundTripAndRejectJunk() throws {
+        let request = FanHelper.Request(id: "8C1F2A9E-1B2C-4D5E-8F90-A1B2C3D4E5F6", setting: .fixed(percent: 80))
+        #expect(FanHelper.Request(line: request.line) == request)
+        #expect(FanHelper.Request(line: "abc auto")?.setting == .automatic)
+        #expect(FanHelper.Request(line: "abc 101") == nil)
+        #expect(FanHelper.Request(line: "../x 80") == nil)
+        #expect(FanHelper.Request(line: "abc 80 extra") == nil)
+        #expect(FanHelper.Request(line: "") == nil)
+    }
+
+    @Test func statusRoundTrips() throws {
+        let status = FanHelper.Status(id: "abc-1", succeeded: false, lines: ["Fan 1: macOS kontrolü geri aldı."])
+        #expect(FanHelper.Status(text: status.text) == status)
+        #expect(FanHelper.Status(text: "abc maybe") == nil)
+        #expect(FanHelper.Status(text: "abc ok")?.lines == [])
+    }
+
+    @Test func installScriptIsOneLineAndRootOwned() throws {
+        let script = FanHelper.installScript(from: "/Users/me/Library/Developer/Xcode/DerivedData/Keel/Build/Products/Debug/Keel.app/Contents/MacOS/Keel", userID: 501)
+        #expect(!script.contains("\n"))
+        #expect(!FanHelper.plist.contains("\n"))
+        #expect(script.contains("/usr/bin/install -o root -g wheel -m 755 '/Users/me/"))
+        #expect(script.contains("/usr/sbin/chown 501 '/Library/Application Support/Keel/FanRequest'"))
+        #expect(script.contains("/bin/launchctl bootstrap system '/Library/LaunchDaemons/com.samigulec.Keel.fan.plist'"))
+        let plist = try #require(try PropertyListSerialization.propertyList(from: Data(FanHelper.plist.utf8), format: nil) as? [String: Any])
+        #expect(plist["Label"] as? String == FanHelper.label)
+        #expect(plist["ProgramArguments"] as? [String] == [FanHelper.executable, FanHelper.daemonFlag])
+        #expect(plist["WatchPaths"] as? [String] == [FanHelper.requestFolder])
+        #expect(FanHelper.uninstallScript().contains("/bin/rm -rf '/Library/Application Support/Keel'"))
+    }
+}

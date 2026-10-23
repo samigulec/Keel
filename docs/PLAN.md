@@ -126,8 +126,11 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 - [x] Fan kontrolü: Otomatik / %60 / %80 / en yüksek; SMC'ye yazan tek
       seferlik komut yönetici şifresiyle root olarak çalışır (M5: `F0md`,
       M3/M4: `Ftst` kilidi, M1/M2: `F0Md`, Intel: `FS! `); hata olursa
-      bütün fanlar otomatiğe döner. Kalıcı yardımcı (SMAppService daemon)
-      Developer ID imzasıyla Faz 4'te
+      bütün fanlar otomatiğe döner
+- [x] Fan yardımcısı (isteğe bağlı, bir kez şifre): root'a ait Keel kopyası
+      + `WatchPaths` ile tetiklenen LaunchDaemon; Keel'in bıraktığı istek
+      dosyasını uygular, yalnızca fanlara dokunur. Keel kapanınca fanlar
+      otomatiğe döner. Developer ID ile SMAppService daemon'a geçiş Faz 4
 - [x] Optimizasyon bölümü: yoğun uygulamalar (Kapat), girişte açılanlar ve
       arka plan servisleri tek yerde; Performans yalnızca canlı ölçümler ve fanlar
 - [x] Keel AI eylem kartları: servis/giriş öğesi kapatma, uygulama

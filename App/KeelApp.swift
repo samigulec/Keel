@@ -60,6 +60,7 @@ struct KeelApp: App {
         Settings {
             SettingsView()
                 .environment(assistant)
+                .environment(performance)
         }
 
         // One way only: with a two-way binding the system can write the
