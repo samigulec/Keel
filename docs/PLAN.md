@@ -113,7 +113,8 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
   App Store kaynağı, kullanılmayan uygulamalar (90+ gün)
 - [x] Performans: ağ hızı (Stats gibi), süreç bazında işlemci kullanımı
 - Sahipsiz artıklar (kaldırılmış uygulamalardan kalanlar), uygulama güncelleyici
-- Sensörler: sıcaklık ve fan (SMC), menü çubuğunda canlı grafikler
+- [x] Sensörler: sıcaklık (HID / SMC) ve fanlar (SMC), salt okunur
+- Menü çubuğunda canlı grafikler
 - Büyük ve eski dosyalar bulucu, kopya dosyalar
 - Kullanıcı LaunchAgent'larını aç/kapat
 

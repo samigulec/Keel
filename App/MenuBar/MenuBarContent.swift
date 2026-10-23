@@ -30,6 +30,17 @@ struct MenuBarContent: View {
                     .foregroundStyle(Palette.slate)
             }
 
+            if let thermals = status.thermals, let hottest = thermals.summary(.cpu)?.hottest ?? thermals.summaries.map(\.hottest).max() {
+                HStack(spacing: 4) {
+                    Text("Sıcaklık").eyebrowStyle()
+                    Spacer()
+                    Text(thermalText(hottest, fans: thermals.fans))
+                        .font(.keelMono(12, .semibold))
+                        .foregroundStyle(Thermal.color(hottest))
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             HStack(spacing: 4) {
                 Text("Ağ").eyebrowStyle()
                 Spacer()
@@ -58,6 +69,12 @@ struct MenuBarContent: View {
         .frame(width: 260)
         .background(Palette.raised)
         .preferredColorScheme(.dark)
+    }
+
+    /// "52 °C · 1.800 dev/dk"
+    private func thermalText(_ celsius: Double, fans: [FanReading]) -> String {
+        guard let fastest = fans.map(\.rpm).max(), fastest >= 1 else { return Thermal.degrees(celsius) }
+        return "\(Thermal.degrees(celsius)) · \(Int(fastest.rounded())) dev/dk"
     }
 
     /// "↓ 1,2 MB/sn  ↑ 80 KB/sn"

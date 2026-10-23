@@ -28,6 +28,8 @@ final class SystemStatus {
     private(set) var networkRate: NetworkRate?
     private(set) var networkTotals: NetworkTotals?
     private(set) var networkAddress: NetworkAddress?
+    /// Temperatures and fans; nil until the first reading or when the Mac reports none.
+    private(set) var thermals: ThermalSnapshot?
 
     // Recent readings, oldest first, for the sparklines.
     private(set) var cpuHistory: [Double] = []
@@ -36,6 +38,8 @@ final class SystemStatus {
     private(set) var diskWriteHistory: [Double] = []
     private(set) var networkInHistory: [Double] = []
     private(set) var networkOutHistory: [Double] = []
+    /// Hottest CPU sensor, in °C.
+    private(set) var cpuTemperatureHistory: [Double] = []
 
     private let interval: Duration = .seconds(2)
     /// Slow-changing readings are taken every 15 ticks (30 s).
@@ -52,6 +56,8 @@ final class SystemStatus {
             var tick = 0
             while !Task.isCancelled {
                 self?.sample(includeSlow: tick % slowEvery == 0)
+                // Sensors take a moment to read; every other tick, off the main thread.
+                if tick % 2 == 0 { await self?.sampleThermals() }
                 tick += 1
                 try? await Task.sleep(for: interval)
             }
@@ -114,6 +120,14 @@ final class SystemStatus {
         }
         diskTotals = totals
         lastDiskSample = (totals, now)
+    }
+
+    private func sampleThermals() async {
+        guard let snapshot = await Task.detached(priority: .utility, operation: { SensorReader.snapshot() }).value else { return }
+        thermals = snapshot
+        if let cpu = snapshot.summary(.cpu) ?? snapshot.summaries.first {
+            cpuTemperatureHistory = Self.appending(cpu.hottest, to: cpuTemperatureHistory)
+        }
     }
 
     private func sampleNetwork() {

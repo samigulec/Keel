@@ -57,7 +57,7 @@ enum KeelTools {
         return [
             AITool(
                 name: "get_system_status",
-                description: "Reads the Mac's current state: chip, CPU load per core, GPU load, memory use and pressure with its breakdown and swap, disk space and throughput, battery health, temperature state and uptime. Call this whenever the user asks why the Mac is slow, hot, loud or low on space, or about memory, CPU, GPU, battery or storage.",
+                description: "Reads the Mac's current state: chip, CPU load per core, GPU load, memory use and pressure with its breakdown and swap, disk space and throughput, battery health, temperatures per part (CPU, GPU, SSD, battery) and fan speeds, thermal state and uptime. Call this whenever the user asks why the Mac is slow, hot, loud or low on space, or about memory, CPU, GPU, battery or storage.",
                 inputSchema: noInput
             ) { _ in
                 systemStatus(status, compact: compact).encodedString()
@@ -273,6 +273,19 @@ enum KeelTools {
                 memoryInfo["cached_files_gb"] = gib(parts.cachedFilesBytes)
             }
             result["memory"] = .object(memoryInfo)
+        }
+
+        if let thermals = status.thermals {
+            var sensors: [String: JSONValue] = [:]
+            for summary in thermals.summaries {
+                sensors[summary.group.rawValue] = ["hottest_c": .number(summary.hottest.rounded()), "average_c": .number(summary.average.rounded())]
+            }
+            result["temperatures"] = .object(sensors)
+            result["fans"] = thermals.hasFans
+                ? .array(thermals.fans.map { fan in
+                    ["rpm": .number(fan.rpm.rounded()), "max_rpm": fan.maximumRPM.map { .number($0.rounded()) } ?? .null]
+                })
+                : "none (fanless Mac)"
         }
 
         var cpu: [String: JSONValue] = ["usage_percent": status.cpuUsage.map(percent) ?? .null]

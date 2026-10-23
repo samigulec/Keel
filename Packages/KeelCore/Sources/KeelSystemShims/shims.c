@@ -88,24 +88,24 @@ int keel_smc_read(io_connect_t connection, const char *key, keel_smc_value *valu
 
 // MARK: - HID temperature sensors
 
-// Not in the public headers, but exported by IOKit and used by Activity
-// Monitor-like tools to read Apple silicon's temperature sensors. Declared
-// here only, with opaque types, so they never clash with the SDK.
-typedef const void *keel_hid_client;
-typedef const void *keel_hid_service;
-typedef const void *keel_hid_event;
-extern keel_hid_client IOHIDEventSystemClientCreate(CFAllocatorRef allocator);
-extern int IOHIDEventSystemClientSetMatching(keel_hid_client client, CFDictionaryRef matching);
-extern CFArrayRef IOHIDEventSystemClientCopyServices(keel_hid_client client);
-extern CFTypeRef IOHIDServiceClientCopyProperty(keel_hid_service service, CFStringRef key);
-extern keel_hid_event IOHIDServiceClientCopyEvent(keel_hid_service service, int64_t type, int32_t options, int64_t timestamp);
+#include <IOKit/hidsystem/IOHIDEventSystemClient.h>
+#include <IOKit/hidsystem/IOHIDServiceClient.h>
+
+// The client, its services and their properties are public API. Creating a
+// full client, matching and reading an event are not in the headers, but
+// IOKit exports them and Activity Monitor-like tools use them to read Apple
+// silicon's temperature sensors. Declared here only, so nothing else sees them.
+typedef struct __keel_hid_event *keel_hid_event;
+extern IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(CFAllocatorRef allocator);
+extern int IOHIDEventSystemClientSetMatching(IOHIDEventSystemClientRef client, CFDictionaryRef matching);
+extern keel_hid_event IOHIDServiceClientCopyEvent(IOHIDServiceClientRef service, int64_t type, int32_t options, int64_t timestamp);
 extern double IOHIDEventGetFloatValue(keel_hid_event event, int32_t field);
 
 enum { KEEL_HID_TEMPERATURE_EVENT = 15, KEEL_HID_SENSOR_PAGE = 0xff00, KEEL_HID_TEMPERATURE_USAGE = 5 };
 
 int keel_read_temperature_sensors(keel_temperature_reading *readings, int capacity) {
     if (!readings || capacity <= 0) return 0;
-    keel_hid_client client = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
+    IOHIDEventSystemClientRef client = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
     if (!client) return 0;
 
     int page = KEEL_HID_SENSOR_PAGE, usage = KEEL_HID_TEMPERATURE_USAGE;
@@ -122,7 +122,7 @@ int keel_read_temperature_sensors(keel_temperature_reading *readings, int capaci
     if (services) {
         CFIndex total = CFArrayGetCount(services);
         for (CFIndex index = 0; index < total && count < capacity; index++) {
-            keel_hid_service service = CFArrayGetValueAtIndex(services, index);
+            IOHIDServiceClientRef service = (IOHIDServiceClientRef)CFArrayGetValueAtIndex(services, index);
             keel_hid_event event = IOHIDServiceClientCopyEvent(service, KEEL_HID_TEMPERATURE_EVENT, 0, 0);
             if (!event) continue;
             double celsius = IOHIDEventGetFloatValue(event, KEEL_HID_TEMPERATURE_EVENT << 16);

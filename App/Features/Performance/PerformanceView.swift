@@ -31,6 +31,10 @@ struct PerformanceView: View {
     private var processesCard: some View {
         ProcessesCard(processes: model.topProcesses, coreCount: status.info.logicalCores)
     }
+    private var thermalCard: some View {
+        ThermalCard(thermals: status.thermals, cpuHistory: status.cpuTemperatureHistory)
+    }
+    private var fansCard: some View { FansCard(thermals: status.thermals) }
     private var topAppsCard: some View { TopAppsCard(apps: model.topApps) }
     private var launchItemsCard: some View {
         LaunchItemsCard(
@@ -46,7 +50,7 @@ struct PerformanceView: View {
         VStack(alignment: .leading, spacing: 24) {
             PageHeader(
                 title: "Performans",
-                subtitle: "İşlemci, GPU, bellek, SSD ve ağın anlık durumu."
+                subtitle: "İşlemci, GPU, bellek, SSD, ağ, sıcaklık ve fanların anlık durumu."
             )
 
             SystemOverview(status: status)
@@ -63,6 +67,8 @@ struct PerformanceView: View {
                     if let battery = status.battery { BatteryCard(battery: battery) }
                     networkCard
                     processesCard
+                    thermalCard
+                    fansCard
                 }
             } else {
                 Grid(horizontalSpacing: 16, verticalSpacing: 16) {
@@ -78,6 +84,7 @@ struct PerformanceView: View {
                         }
                     }
                     GridRow { networkCard; processesCard }
+                    GridRow { thermalCard; fansCard }
                 }
             }
 
@@ -534,6 +541,162 @@ private struct NetworkLiveCard: View {
                 .font(.keelMono(20, .semibold))
                 .tracking(-1)
                 .foregroundStyle(Palette.text)
+        }
+    }
+}
+
+/// The hottest reading per part, from Apple's own temperature sensors.
+private struct ThermalCard: View {
+    let thermals: ThermalSnapshot?
+    let cpuHistory: [Double]
+    @State private var showsAll = false
+
+    var body: some View {
+        PanelCard {
+            CardTitle(title: "Sıcaklık", status: hottest.map { Thermal.state($0) }, statusColor: hottest.map { Thermal.color($0) } ?? Palette.slate)
+            if let thermals, !thermals.sensors.isEmpty {
+                if !cpuHistory.isEmpty {
+                    Sparkline(values: cpuHistory, maxValue: 105, tint: Thermal.color(cpuHistory.last ?? 0))
+                }
+                VStack(spacing: 10) {
+                    ForEach(thermals.summaries, id: \.group) { summary in
+                        row(Thermal.title(summary.group), summary.hottest, detail: summary.sensorCount > 1 ? "ort. \(Thermal.degrees(summary.average))" : nil)
+                    }
+                }
+                Button(showsAll ? "Sensörleri gizle" : "Tüm sensörler (\(thermals.sensors.count))") {
+                    withAnimation(.easeInOut(duration: 0.15)) { showsAll.toggle() }
+                }
+                .buttonStyle(.plain)
+                .font(.keel(12, .bold))
+                .foregroundStyle(Palette.mintText)
+                if showsAll {
+                    VStack(spacing: 4) {
+                        ForEach(thermals.sensors.sorted { $0.celsius > $1.celsius }) { sensor in
+                            HStack {
+                                Text(sensor.name)
+                                    .font(.keelMono(11, .medium))
+                                    .foregroundStyle(Palette.slate)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(Thermal.degrees(sensor.celsius))
+                                    .font(.keelMono(11, .semibold))
+                                    .foregroundStyle(Palette.text)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(thermals == nil ? "Sensörler okunuyor…" : "Bu Mac sıcaklık sensörü bildirmiyor.")
+                    .font(.keel(13, .medium))
+                    .foregroundStyle(Palette.slate)
+            }
+        }
+    }
+
+    private var hottest: Double? {
+        thermals?.summary(.cpu)?.hottest ?? thermals?.summaries.map(\.hottest).max()
+    }
+
+    private func row(_ title: String, _ celsius: Double, detail: String?) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.keel(14, .semibold))
+                .foregroundStyle(Palette.text)
+                .frame(width: 70, alignment: .leading)
+            ProgressBar(fraction: celsius / 105, tint: Thermal.color(celsius), height: 6)
+            Text(Thermal.degrees(celsius))
+                .font(.keelMono(13, .semibold))
+                .foregroundStyle(Palette.text)
+                .frame(width: 52, alignment: .trailing)
+            if let detail {
+                Text(detail)
+                    .font(.keel(11, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .frame(width: 64, alignment: .trailing)
+            }
+        }
+    }
+}
+
+/// Fan speeds from the SMC; Keel only reads them.
+private struct FansCard: View {
+    let thermals: ThermalSnapshot?
+
+    var body: some View {
+        PanelCard {
+            CardTitle(title: "Fanlar", status: status, statusColor: Palette.slate)
+            if let thermals, !thermals.fans.isEmpty {
+                VStack(spacing: 14) {
+                    ForEach(thermals.fans) { fan in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(thermals.fans.count > 1 ? (fan.index == 0 ? "Sol fan" : fan.index == 1 ? "Sağ fan" : "Fan \(fan.index + 1)") : "Fan")
+                                    .font(.keel(14, .semibold))
+                                    .foregroundStyle(Palette.text)
+                                Spacer()
+                                Text(fan.rpm < 1 ? "Durdu" : "\(Int(fan.rpm.rounded())) dev/dk")
+                                    .font(.keelMono(16, .semibold))
+                                    .foregroundStyle(Palette.text)
+                            }
+                            ProgressBar(fraction: fan.fraction ?? 0, tint: Color(hex: 0x4FD8F5), height: 6)
+                            if let low = fan.minimumRPM, let high = fan.maximumRPM {
+                                Text("En düşük \(Int(low)) · en yüksek \(Int(high)) dev/dk")
+                                    .font(.keel(11, .medium))
+                                    .foregroundStyle(Palette.slate)
+                            }
+                        }
+                    }
+                }
+                Text("Apple silicon Mac'lerde fanlar yük artana kadar çoğu zaman durur; bu normaldir.")
+                    .font(.keel(11, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(thermals == nil ? "Fanlar okunuyor…" : "Bu Mac'te fan yok; sessiz, pasif soğutmayla çalışıyor.")
+                    .font(.keel(13, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var status: String? {
+        guard let fans = thermals?.fans, !fans.isEmpty else { return nil }
+        let spinning = fans.filter { $0.rpm >= 1 }.count
+        return spinning == 0 ? "Sessiz" : "\(spinning) fan dönüyor"
+    }
+}
+
+/// Turkish wording and colors for temperatures.
+enum Thermal {
+    static func degrees(_ celsius: Double) -> String {
+        "\(Int(celsius.rounded())) °C"
+    }
+
+    static func color(_ celsius: Double) -> Color {
+        switch celsius {
+        case ..<70: Palette.keelGreen
+        case ..<90: Palette.warningText
+        default: Palette.danger
+        }
+    }
+
+    static func state(_ celsius: Double) -> String {
+        switch celsius {
+        case ..<70: "Normal"
+        case ..<90: "Sıcak"
+        default: "Çok sıcak"
+        }
+    }
+
+    static func title(_ group: SensorGroup) -> String {
+        switch group {
+        case .cpu: "İşlemci"
+        case .gpu: "GPU"
+        case .soc: "Yonga"
+        case .ssd: "SSD"
+        case .battery: "Pil"
+        case .other: "Diğer"
         }
     }
 }
