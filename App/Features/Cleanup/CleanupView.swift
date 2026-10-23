@@ -6,6 +6,7 @@ struct CleanupView: View {
     @Environment(SystemStatus.self) private var status
     @State private var confirming = false
     @State private var hasFullDiskAccess = FullDiskAccess.isGranted
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -39,9 +40,16 @@ struct CleanupView: View {
             case .scanning:
                 ScanningCard(cancel: model.cancelScan)
             case .ready, .cleaning:
-                HStack(alignment: .top, spacing: 24) {
-                    categoryList
-                    summary.frame(width: 300)
+                if compact {
+                    VStack(spacing: 20) {
+                        categoryList
+                        summary
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 24) {
+                        categoryList
+                        summary.frame(width: 300)
+                    }
                 }
             }
         }

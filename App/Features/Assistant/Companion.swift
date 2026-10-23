@@ -19,7 +19,7 @@ struct CompanionPanel: View {
                     Text("Keel AI")
                         .font(.keel(17, .extraBold))
                         .foregroundStyle(Palette.text)
-                    Text("\(section.title) ekranında yanındayım")
+                    Text("Şu an: \(section.title)")
                         .font(.keel(12, .medium))
                         .foregroundStyle(Palette.slate)
                         .lineLimit(1)

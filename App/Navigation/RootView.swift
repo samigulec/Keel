@@ -7,6 +7,7 @@ struct RootView: View {
     @State private var selection: AppSection = .smartScan
     /// Keel AI beside the current screen; remembered between launches.
     @AppStorage("keel.companion.open") private var companionOpen = false
+    @State private var contentWidth: CGFloat = 1_000
 
     var body: some View {
         HStack(spacing: 0) {
@@ -31,12 +32,17 @@ struct RootView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .overlay(alignment: .bottomTrailing) {
-                        CompanionButton(isOpen: companionOpen) { toggleCompanion() }
-                            .padding(24)
+                        // The open panel has its own close button.
+                        if !companionOpen {
+                            CompanionButton(isOpen: false) { toggleCompanion() }
+                                .padding(24)
+                        }
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
+            .environment(\.compactLayout, contentWidth < 900)
 
             if companionOpen, selection != .assistant {
                 CompanionPanel(

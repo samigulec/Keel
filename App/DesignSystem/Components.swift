@@ -209,3 +209,11 @@ struct PageHeader: View {
         .accessibilityAddTraits(.isHeader)
     }
 }
+
+// MARK: - Responsive layout
+
+extension EnvironmentValues {
+    /// True when the content area is narrow, e.g. beside the Keel AI panel
+    /// or in a small window; screens stack their columns then.
+    @Entry var compactLayout = false
+}

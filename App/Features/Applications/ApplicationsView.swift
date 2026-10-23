@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ApplicationsView: View {
     @Environment(ApplicationsModel.self) private var model
+    @Environment(\.compactLayout) private var compact
     @State private var pending: [UninstallPlan] = []
     @State private var confirming = false
 
@@ -32,13 +33,26 @@ struct ApplicationsView: View {
             default:
                 SummaryTiles()
                 Toolbar()
-                HStack(alignment: .top, spacing: 20) {
-                    AppList()
-                    DetailPanel { plans in
-                        pending = plans
-                        confirming = true
+                if compact {
+                    // Narrow: the chosen app's details sit above a full-width list.
+                    VStack(spacing: 16) {
+                        if model.focused != nil {
+                            DetailPanel(showsClose: true) { plans in
+                                pending = plans
+                                confirming = true
+                            }
+                        }
+                        AppList()
                     }
-                    .frame(width: 340)
+                } else {
+                    HStack(alignment: .top, spacing: 20) {
+                        AppList()
+                        DetailPanel { plans in
+                            pending = plans
+                            confirming = true
+                        }
+                        .frame(width: 340)
+                    }
                 }
                 if !model.selection.isEmpty {
                     SelectionBar {
@@ -90,9 +104,10 @@ struct ApplicationsView: View {
 
 private struct SummaryTiles: View {
     @Environment(ApplicationsModel.self) private var model
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: 14) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: compact ? 2 : 4), spacing: 14) {
             tile(.all, title: "Uygulama", value: "\(model.apps.count)", detail: model.isMeasuring ? "boyutlar ölçülüyor…" : ByteFormat.string(model.totalBytes), mascot: .blok)
             tile(.unused, title: "Kullanılmayan", value: "\(model.count(.unused))", detail: "90 günden uzun süredir açılmadı", mascot: .kee)
             tile(.intel, title: "Intel", value: "\(model.count(.intel))", detail: "Rosetta ile çalışıyor", mascot: .zip)
@@ -108,6 +123,8 @@ private struct SummaryTiles: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title).eyebrowStyle(color: isOn ? Palette.Sidebar.eyebrow : Palette.slate)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(value)
                         .font(.keelMono(28, .semibold))
                         .tracking(-1.5)
@@ -116,9 +133,11 @@ private struct SummaryTiles: View {
                         .font(.keel(12, .medium))
                         .foregroundStyle(isOn ? Palette.Sidebar.text : Palette.slate)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
+                .layoutPriority(1)
                 Spacer(minLength: 0)
-                Mascot(character: mascot, size: 34)
+                Mascot(character: mascot, size: 30)
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -136,55 +155,77 @@ private struct SummaryTiles: View {
 
 private struct Toolbar: View {
     @Environment(ApplicationsModel.self) private var model
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        @Bindable var model = model
-        HStack(spacing: 10) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 6) {
-                    ForEach(ApplicationsModel.Filter.allCases) { filter in
-                        let isOn = model.filter == filter
-                        Button {
-                            model.filter = filter
-                        } label: {
-                            Text("\(filter.title) \(model.count(filter))")
-                                .font(.keel(13, .bold))
-                                .foregroundStyle(isOn ? Palette.onAccent : Palette.text)
-                                .padding(.horizontal, 14)
-                                .frame(height: 34)
-                                .background(isOn ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: Capsule())
-                                .overlay { Capsule().strokeBorder(isOn ? .clear : Palette.border) }
-                        }
-                        .buttonStyle(.plain)
-                    }
+        if compact {
+            VStack(alignment: .leading, spacing: 10) {
+                filters
+                HStack(spacing: 10) {
+                    searchField.frame(maxWidth: .infinity)
+                    sortMenu
                 }
             }
-            .scrollIndicators(.never)
-
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Palette.slate)
-                TextField("Ara", text: $model.search)
-                    .textFieldStyle(.plain)
-                    .font(.keel(14, .medium))
+        } else {
+            HStack(spacing: 10) {
+                filters
+                searchField.frame(width: 200)
+                sortMenu
             }
-            .padding(.horizontal, 12)
-            .frame(width: 200, height: 34)
-            .background(Palette.mist, in: Capsule())
-            .overlay { Capsule().strokeBorder(Palette.border) }
-
-            Menu {
-                Picker("Sırala", selection: $model.sort) {
-                    ForEach(ApplicationsModel.Sort.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Label(model.sort.title, systemImage: "arrow.up.arrow.down")
-                    .font(.keel(13, .bold))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
+    }
+
+    private var filters: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(ApplicationsModel.Filter.allCases) { filter in
+                    let isOn = model.filter == filter
+                    Button {
+                        model.filter = filter
+                    } label: {
+                        Text("\(filter.title) \(model.count(filter))")
+                            .font(.keel(13, .bold))
+                            .foregroundStyle(isOn ? Palette.onAccent : Palette.text)
+                            .padding(.horizontal, 14)
+                            .frame(height: 34)
+                            .background(isOn ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: Capsule())
+                            .overlay { Capsule().strokeBorder(isOn ? .clear : Palette.border) }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .scrollIndicators(.never)
+    }
+
+    private var searchField: some View {
+        @Bindable var model = model
+        return HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Palette.slate)
+            TextField("Ara", text: $model.search)
+                .textFieldStyle(.plain)
+                .font(.keel(14, .medium))
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(Palette.mist, in: Capsule())
+        .overlay { Capsule().strokeBorder(Palette.border) }
+    }
+
+    private var sortMenu: some View {
+        @Bindable var model = model
+        return Menu {
+            Picker("Sırala", selection: $model.sort) {
+                ForEach(ApplicationsModel.Sort.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(model.sort.title, systemImage: "arrow.up.arrow.down")
+                .font(.keel(13, .bold))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 }
 
@@ -252,6 +293,7 @@ private struct AppRow: View {
                                 .font(.keel(15, .bold))
                                 .foregroundStyle(Palette.text)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
                             if model.isRunning(app) {
                                 Circle().fill(Palette.keelGreen).frame(width: 7, height: 7)
                                     .help("Açık")
@@ -263,15 +305,21 @@ private struct AppRow: View {
                             .foregroundStyle(model.isUnused(entry) ? Palette.warningText : Palette.slate)
                             .lineLimit(1)
                     }
+                    .layoutPriority(1)
                     Spacer(minLength: 8)
                     if app.architecture == .intel {
                         Pill(text: "Intel", background: Palette.warningTint, foreground: Palette.warningText)
+                            .fixedSize()
                     }
-                    if let size = entry.sizeBytes {
-                        ByteAmount(bytes: size, size: 14)
-                    } else {
-                        ProgressView().controlSize(.small)
+                    Group {
+                        if let size = entry.sizeBytes {
+                            ByteAmount(bytes: size, size: 14)
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
                     }
+                    .fixedSize()
+                    .frame(minWidth: 64, alignment: .trailing)
                 }
                 .contentShape(Rectangle())
             }
@@ -295,6 +343,8 @@ private struct AppRow: View {
 
 private struct DetailPanel: View {
     @Environment(ApplicationsModel.self) private var model
+    /// In the narrow layout the panel sits above the list and can be closed.
+    var showsClose = false
     let confirm: ([UninstallPlan]) -> Void
 
     var body: some View {
@@ -302,6 +352,22 @@ private struct DetailPanel: View {
             if let entry = model.focused {
                 AppDetail(entry: entry, confirm: confirm)
                     .id(entry.id)
+                    .overlay(alignment: .topTrailing) {
+                        if showsClose {
+                            Button {
+                                model.focusedID = nil
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(Palette.subtle)
+                                    .frame(width: 30, height: 30)
+                                    .background(Palette.mist, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(14)
+                            .accessibilityLabel("Ayrıntıları kapat")
+                        }
+                    }
             } else {
                 VStack(spacing: 14) {
                     Mascot(character: .blok, size: 64)

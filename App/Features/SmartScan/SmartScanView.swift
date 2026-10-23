@@ -5,6 +5,7 @@ struct SmartScanView: View {
     var openCleanup: () -> Void
     @Environment(SystemStatus.self) private var status
     @Environment(CleanupModel.self) private var cleanup
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -15,7 +16,7 @@ struct SmartScanView: View {
 
             hero
 
-            HStack(alignment: .top, spacing: 16) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16, alignment: .top), count: compact ? 2 : 3), spacing: 16) {
                 storageCard
                 StatCard(
                     title: "Bellek (RAM)",

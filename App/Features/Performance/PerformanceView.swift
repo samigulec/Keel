@@ -4,6 +4,43 @@ import SwiftUI
 struct PerformanceView: View {
     @Environment(SystemStatus.self) private var status
     @Environment(PerformanceModel.self) private var model
+    @Environment(\.compactLayout) private var compact
+
+    // MARK: Cards
+
+    private var cpuCard: some View { CPULiveCard(status: status) }
+    private var gpuCard: some View { GPULiveCard(gpu: status.gpu, history: status.gpuHistory) }
+    private var memoryCard: some View { MemoryLiveCard(memory: status.memory) }
+    private var diskCard: some View {
+        DiskLiveCard(rate: status.diskRate, readHistory: status.diskReadHistory, writeHistory: status.diskWriteHistory)
+    }
+    private var breakdownCard: some View { MemoryBreakdownCard(memory: status.memory) }
+    private var coresCard: some View { CoresCard(usage: status.perCoreUsage, info: status.info) }
+    private var storageCard: some View {
+        StorageCard(device: status.storageDevice, disk: status.disk, totals: status.diskTotals)
+    }
+    private var networkCard: some View {
+        NetworkLiveCard(
+            rate: status.networkRate,
+            totals: status.networkTotals,
+            address: status.networkAddress,
+            inHistory: status.networkInHistory,
+            outHistory: status.networkOutHistory
+        )
+    }
+    private var processesCard: some View {
+        ProcessesCard(processes: model.topProcesses, coreCount: status.info.logicalCores)
+    }
+    private var topAppsCard: some View { TopAppsCard(apps: model.topApps) }
+    private var launchItemsCard: some View {
+        LaunchItemsCard(
+            items: model.launchItems,
+            activeCount: model.activeLaunchItems.count,
+            loaded: model.launchItemsLoaded
+        ) {
+            Task { await model.refreshLaunchItems() }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -14,48 +51,40 @@ struct PerformanceView: View {
 
             SystemOverview(status: status)
 
-            Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-                GridRow {
-                    CPULiveCard(status: status)
-                    GPULiveCard(gpu: status.gpu, history: status.gpuHistory)
+            if compact {
+                VStack(spacing: 16) {
+                    cpuCard
+                    gpuCard
+                    memoryCard
+                    diskCard
+                    breakdownCard
+                    coresCard
+                    storageCard
+                    if let battery = status.battery { BatteryCard(battery: battery) }
+                    networkCard
+                    processesCard
                 }
-                GridRow {
-                    MemoryLiveCard(memory: status.memory)
-                    DiskLiveCard(rate: status.diskRate, readHistory: status.diskReadHistory, writeHistory: status.diskWriteHistory)
-                }
-                GridRow {
-                    MemoryBreakdownCard(memory: status.memory)
-                    CoresCard(usage: status.perCoreUsage, info: status.info)
-                }
-                GridRow {
-                    StorageCard(device: status.storageDevice, disk: status.disk, totals: status.diskTotals)
-                    if let battery = status.battery {
-                        BatteryCard(battery: battery)
-                    } else {
-                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+            } else {
+                Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+                    GridRow { cpuCard; gpuCard }
+                    GridRow { memoryCard; diskCard }
+                    GridRow { breakdownCard; coresCard }
+                    GridRow {
+                        storageCard
+                        if let battery = status.battery {
+                            BatteryCard(battery: battery)
+                        } else {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        }
                     }
-                }
-                GridRow {
-                    NetworkLiveCard(
-                        rate: status.networkRate,
-                        totals: status.networkTotals,
-                        address: status.networkAddress,
-                        inHistory: status.networkInHistory,
-                        outHistory: status.networkOutHistory
-                    )
-                    ProcessesCard(processes: model.topProcesses, coreCount: status.info.logicalCores)
+                    GridRow { networkCard; processesCard }
                 }
             }
 
-            HStack(alignment: .top, spacing: 16) {
-                TopAppsCard(apps: model.topApps)
-                LaunchItemsCard(
-                    items: model.launchItems,
-                    activeCount: model.activeLaunchItems.count,
-                    loaded: model.launchItemsLoaded
-                ) {
-                    Task { await model.refreshLaunchItems() }
-                }
+            if compact {
+                VStack(spacing: 16) { topAppsCard; launchItemsCard }
+            } else {
+                HStack(alignment: .top, spacing: 16) { topAppsCard; launchItemsCard }
             }
         }
         .task {
