@@ -244,7 +244,7 @@ final class SmartCareModel {
     }
 
     private func runSystem() async {
-        status.refresh()
+        await status.refreshNow()
         await performance.refreshLaunchItems()
         finished.insert(.system)
     }
