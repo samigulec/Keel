@@ -85,13 +85,17 @@ public struct LargeFileScanner: Sendable {
     ]
 
     /// Where `url` sits in an app's data, or nil when it is not in an area
-    /// Keel scans or is Apple's own data.
+    /// Keel scans or is Apple's own data. Links are resolved on both sides
+    /// (on macOS /var is /private/var).
     public static func appDataLocation(of url: URL, home: URL) -> AppDataLocation? {
-        let library = home.appendingPathComponent("Library", isDirectory: true).standardizedFileURL.pathComponents
-        let parts = url.standardizedFileURL.pathComponents
+        let library = home.appendingPathComponent("Library", isDirectory: true).resolvingSymlinksInPath().pathComponents
+        let parts = url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).pathComponents
         guard parts.count > library.count + 2, Array(parts.prefix(library.count)) == library else { return nil }
-        let area = parts[library.count]
-        let owner = parts[library.count + 1]
+        return location(area: parts[library.count], owner: parts[library.count + 1])
+    }
+
+    /// The owner folder `owner` in `area`, unless Keel leaves it alone.
+    static func location(area: String, owner: String) -> AppDataLocation? {
         guard appDataAreas.contains(area), !owner.hasPrefix(".") else { return nil }
         if area != "Developer" {
             let lowered = owner.lowercased()
@@ -124,10 +128,13 @@ public struct LargeFileScanner: Sendable {
 
     public func scan(limit: Int = 500, isCancelled: () -> Bool = { false }) -> [LargeFile] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
-        guard var topLevel = try? FileManager.default.contentsOfDirectory(
+        guard let topLevel = try? FileManager.default.contentsOfDirectory(
             at: home, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
         ) else { return [] }
-        topLevel.removeAll { Self.skippedTopLevel.contains($0.lastPathComponent) }
+        // Each root with the app whose data it is, if any.
+        var roots: [(url: URL, appData: AppDataLocation?)] = topLevel
+            .filter { !Self.skippedTopLevel.contains($0.lastPathComponent) }
+            .map { ($0, nil) }
         if includeAppData {
             // Each owner's folder on its own, so Apple's can be left out whole.
             for area in Self.appDataAreas {
@@ -135,16 +142,17 @@ public struct LargeFileScanner: Sendable {
                 let owners = (try? FileManager.default.contentsOfDirectory(
                     at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
                 )) ?? []
-                topLevel += owners.filter { owner in
-                    (try? owner.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-                        && Self.appDataLocation(of: owner.appendingPathComponent("file"), home: home) != nil
+                for owner in owners where (try? owner.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                    if let location = Self.location(area: area, owner: owner.lastPathComponent) {
+                        roots.append((owner, location))
+                    }
                 }
             }
         }
         let protected = Set(SafetyPolicy.standardProtectedRoots(home: home).map(\.standardizedFileURL.path))
 
-        var found: [(url: URL, size: Int64)] = []
-        for folder in topLevel {
+        var found: [(url: URL, size: Int64, appData: AppDataLocation?)] = []
+        for (folder, appData) in roots {
             if isCancelled() { break }
             if Self.packageExtensions.contains(folder.pathExtension.lowercased()) { continue }
             var candidates: [URL] = []
@@ -176,7 +184,7 @@ public struct LargeFileScanner: Sendable {
                 guard let values = try? url.resourceValues(forKeys: Set(keys)),
                       values.isRegularFile == true, values.isSymbolicLink != true else { continue }
                 let size = Self.size(values)
-                if size >= minimumBytes { found.append((url, size)) }
+                if size >= minimumBytes { found.append((url, size, appData)) }
             }
         }
 
@@ -186,7 +194,7 @@ public struct LargeFileScanner: Sendable {
             .map {
                 LargeFile(
                     url: $0.url, sizeBytes: $0.size, lastActivity: lastActivity($0.url), kind: LargeFile.kind(of: $0.url),
-                    appData: Self.appDataLocation(of: $0.url, home: home)
+                    appData: $0.appData
                 )
             }
     }
