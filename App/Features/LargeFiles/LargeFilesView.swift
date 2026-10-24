@@ -11,7 +11,7 @@ struct LargeFilesView: View {
             HStack(alignment: .bottom) {
                 PageHeader(
                     title: "Büyük Dosyalar",
-                    subtitle: "Ana klasöründe yer kaplayan büyük ve uzun süredir açılmamış dosyalar. Library ve uygulamalar taranmaz; seçtiklerin Çöp Kutusu'na gider."
+                    subtitle: "Klasörlerindeki ve uygulamaların verilerindeki büyük, uzun süredir açılmamış dosyalar. Hiçbir şey sen seçmeden silinmez; seçtiklerin Çöp Kutusu'na gider."
                 )
                 Spacer(minLength: 16)
                 if model.phase == .ready {
@@ -80,8 +80,16 @@ struct LargeFilesView: View {
             Button("Taşı") { Task { await model.removeSelected() } }
             Button("Vazgeç", role: .cancel) {}
         } message: {
-            Text("\(ByteFormat.string(model.selectedBytes)) Çöp Kutusu'na gider; oradan ya da \"Geri al\" ile eski yerine koyabilirsin. Çöp Kutusu boşaltılınca yer açılır.")
+            Text(confirmationText)
         }
+    }
+
+    private var confirmationText: String {
+        var text = "\(ByteFormat.string(model.selectedBytes)) Çöp Kutusu'na gider; oradan ya da \"Geri al\" ile eski yerine koyabilirsin. Çöp Kutusu boşaltılınca yer açılır."
+        if model.selectionHasAppData {
+            text += "\n\nSeçimde uygulama verileri var: o uygulama bu dosyaları yeniden indirebilir ya da onlarsız bazı içeriklerini (oyun, sanal makine, indirilen medya) kaybedebilir. Açık uygulamaların dosyaları atlanır."
+        }
+        return text
     }
 }
 
@@ -93,7 +101,7 @@ private struct StartCard: View {
             Text("Henüz taranmadı")
                 .font(.keel(20, .extraBold))
                 .foregroundStyle(Palette.text)
-            Text("Tarama yalnızca okur. Masaüstü, Belgeler, İndirilenler ve diğer klasörlerindeki büyük dosyaları bulur.")
+            Text("Tarama yalnızca okur. Masaüstü, Belgeler, İndirilenler gibi klasörlerindeki ve uygulamaların ~/Library'deki verilerindeki büyük dosyaları bulur. Apple'ın sistem verileri, Mail, Mesajlar ve iCloud'a dokunulmaz.")
                 .font(.keel(14, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)
@@ -113,12 +121,8 @@ private struct Tiles: View {
             tile("Bulunan", ByteFormat.string(model.totalBytes), "\(model.files.count) dosya, 50 MB+", highlighted: true)
             tile("1 yıldır açılmamış", ByteFormat.string(model.oldBytes), "Unutulmuş olabilir")
             tile("İndirilenler", ByteFormat.string(model.downloadsBytes), "Çoğu yeniden indirilebilir")
-            tile("Disk görüntüleri", ByteFormat.string(kindBytes(.diskImage) + kindBytes(.installer)), "Kurulumdan kalan .dmg ve .pkg")
+            tile("Uygulama verileri", ByteFormat.string(model.appDataBytes), "\(model.appDataCount) dosya, ~/Library'de")
         }
-    }
-
-    private func kindBytes(_ kind: LargeFile.Kind) -> Int64 {
-        model.files.filter { $0.kind == kind }.reduce(0) { $0 + $1.sizeBytes }
     }
 
     private func tile(_ title: String, _ value: String, _ detail: String, highlighted: Bool = false) -> some View {
@@ -170,6 +174,10 @@ private struct Filters: View {
             .scrollIndicators(.never)
 
             HStack(spacing: 10) {
+                Picker("Konum", selection: $model.place) {
+                    ForEach(LargeFilesModel.Place.allCases) { Text($0.title).tag($0) }
+                }
+                .fixedSize()
                 Picker("Son açılış", selection: $model.age) {
                     ForEach(LargeFilesModel.Age.allCases) { Text($0.title).tag($0) }
                 }
@@ -260,7 +268,7 @@ private struct FileRow: View {
                     .foregroundStyle(Palette.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text("\(FileText.folder(file.url)) · \(FileText.lastOpened(file.lastActivity))")
+                Text(detail)
                     .font(.keel(12, .medium))
                     .foregroundStyle(model.isOlder(file, than: .oneYear) ? Palette.warningText : Palette.slate)
                     .lineLimit(1)
@@ -269,6 +277,12 @@ private struct FileRow: View {
             .layoutPriority(1)
 
             Spacer(minLength: 8)
+
+            if let location = file.appData {
+                Pill(text: model.ownerName(location), background: Palette.mist, foreground: Palette.subtle)
+                    .lineLimit(1)
+                    .help("\(model.ownerName(location)) uygulamasının verisi (\(location.area))")
+            }
 
             Menu {
                 Button("Finder'da göster") { model.reveal(file) }
@@ -289,6 +303,14 @@ private struct FileRow: View {
         .padding(.horizontal, 22)
         .frame(minHeight: 56)
         .help(file.url.path)
+    }
+
+    /// "~/Downloads · 3 ay önce", or for app data the folder inside the app's own.
+    private var detail: String {
+        guard let location = file.appData else {
+            return "\(FileText.folder(file.url)) · \(FileText.lastOpened(file.lastActivity))"
+        }
+        return "\(location.area) › \(location.owner) · \(FileText.lastOpened(file.lastActivity))"
     }
 }
 

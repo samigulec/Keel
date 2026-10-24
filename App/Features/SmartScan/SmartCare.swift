@@ -256,7 +256,8 @@ final class SmartCareModel {
         inputs.optInBytes = cleanup.optInBytes
         inputs.unusedApps = applications.apps.filter { applications.isUnused($0) && !$0.app.isSystem }
         inputs.intelApps = applications.apps.filter { $0.app.architecture == .intel }.count
-        let old = largeFiles.files.filter { largeFiles.isOlder($0, than: .oneYear) }
+        // The user's own forgotten files; apps' data is judged on its own screen.
+        let old = largeFiles.files.filter { $0.appData == nil && largeFiles.isOlder($0, than: .oneYear) }
         inputs.oldFilesBytes = old.reduce(0) { $0 + $1.sizeBytes }
         inputs.oldFilesCount = old.count
         inputs.disk = status.disk

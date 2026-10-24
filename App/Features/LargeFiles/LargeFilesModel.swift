@@ -2,7 +2,8 @@ import AppKit
 import KeelCore
 import Observation
 
-/// Large and old files in the home folder, and moving them to the Trash.
+/// Large and old files in the home folder and in apps' data, and moving
+/// them to the Trash.
 @MainActor
 @Observable
 final class LargeFilesModel {
@@ -33,6 +34,20 @@ final class LargeFilesModel {
         }
     }
 
+    /// The user's own files, apps' data in ~/Library, or both.
+    enum Place: String, CaseIterable, Identifiable {
+        case all, personal, appData
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all: "Her yer"
+            case .personal: "Kişisel dosyalar"
+            case .appData: "Uygulama verileri"
+            }
+        }
+    }
+
     enum MinimumSize: Int64, CaseIterable, Identifiable {
         case fifty = 50_000_000
         case hundred = 100_000_000
@@ -49,12 +64,14 @@ final class LargeFilesModel {
     private(set) var lastRestore: RestoreReport?
 
     var kind: LargeFile.Kind?
+    var place: Place = .all
     var age: Age = .any
     var minimumSize: MinimumSize = .hundred
     var selection: Set<String> = []
 
     private let status: SystemStatus
     @ObservationIgnored private var icons: [String: NSImage] = [:]
+    @ObservationIgnored private var ownerNames: [String: String] = [:]
     @ObservationIgnored private var scanTask: Task<Void, Never>?
 
     init(status: SystemStatus) {
@@ -71,7 +88,7 @@ final class LargeFilesModel {
         scanTask = Task {
             // Scan once at the smallest size; the size filter then works instantly.
             let found = await Task.detached(priority: .userInitiated) {
-                LargeFileScanner(minimumBytes: MinimumSize.fifty.rawValue).scan()
+                LargeFileScanner(minimumBytes: MinimumSize.fifty.rawValue, includeAppData: true).scan()
             }.value
             files = found
             selection = selection.filter { id in found.contains { $0.id == id } }
@@ -93,7 +110,16 @@ final class LargeFilesModel {
         files.filter { file in
             file.sizeBytes >= minimumSize.rawValue
                 && (kind == nil || file.kind == kind)
+                && isIn(file, place)
                 && isOlder(file, than: age)
+        }
+    }
+
+    func isIn(_ file: LargeFile, _ place: Place) -> Bool {
+        switch place {
+        case .all: true
+        case .personal: file.appData == nil
+        case .appData: file.appData != nil
         }
     }
 
@@ -104,10 +130,12 @@ final class LargeFilesModel {
     }
 
     func count(_ kind: LargeFile.Kind?) -> Int {
-        files.filter { $0.sizeBytes >= minimumSize.rawValue && (kind == nil || $0.kind == kind) && isOlder($0, than: age) }.count
+        files.filter { $0.sizeBytes >= minimumSize.rawValue && (kind == nil || $0.kind == kind) && isIn($0, place) && isOlder($0, than: age) }.count
     }
 
     var totalBytes: Int64 { files.reduce(0) { $0 + $1.sizeBytes } }
+    var appDataBytes: Int64 { files.filter { $0.appData != nil }.reduce(0) { $0 + $1.sizeBytes } }
+    var appDataCount: Int { files.filter { $0.appData != nil }.count }
     var oldBytes: Int64 { files.filter { isOlder($0, than: .oneYear) }.reduce(0) { $0 + $1.sizeBytes } }
     var downloadsBytes: Int64 {
         let downloads = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads").path + "/"
@@ -115,6 +143,27 @@ final class LargeFilesModel {
     }
     var selectedFiles: [LargeFile] { files.filter { selection.contains($0.id) } }
     var selectedBytes: Int64 { selectedFiles.reduce(0) { $0 + $1.sizeBytes } }
+    var selectionHasAppData: Bool { selectedFiles.contains { $0.appData != nil } }
+
+    /// The app a data folder belongs to, e.g. "com.docker.docker" -> "Docker".
+    func ownerName(_ location: AppDataLocation) -> String {
+        if let name = ownerNames[location.owner] { return name }
+        var id = location.owner
+        if id.hasPrefix("group.") { id.removeFirst(6) }
+        // Group containers may start with the developer's team ID: "UBF8T346G9.com.microsoft.teams".
+        if let dot = id.firstIndex(of: "."), id.distance(from: id.startIndex, to: dot) == 10,
+           id[..<dot].allSatisfy({ $0.isUppercase || $0.isNumber }) {
+            id = String(id[id.index(after: dot)...])
+        }
+        var name = location.owner
+        if id.contains("."), let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+            name = app.deletingPathExtension().lastPathComponent
+        } else if location.area == "Developer" {
+            name = location.owner == "CoreSimulator" ? "iOS Simülatörü" : location.owner
+        }
+        ownerNames[location.owner] = name
+        return name
+    }
 
     func icon(for file: LargeFile) -> NSImage {
         if let icon = icons[file.id] { return icon }
@@ -129,8 +178,12 @@ final class LargeFilesModel {
         let chosen = selectedFiles
         guard phase == .ready, !chosen.isEmpty else { return }
         phase = .removing
+        // An open app's data is left alone; the report says so.
+        let running = NSWorkspace.shared.runningApplications
+        let bundleIDs = Set(running.compactMap { $0.bundleIdentifier?.lowercased() })
+        let names = Set(running.compactMap { $0.localizedName?.lowercased() })
         let report = await Task.detached(priority: .userInitiated) {
-            LargeFileRemover.standard().perform(chosen)
+            LargeFileRemover.standard().perform(chosen, runningBundleIDs: bundleIDs, runningNames: names)
         }.value
         let removed = Set(report.removed.map(\.id))
         files.removeAll { removed.contains($0.id) }

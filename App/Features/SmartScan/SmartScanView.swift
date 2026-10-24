@@ -145,6 +145,7 @@ struct SmartScanView: View {
             navigate(.applications)
         case .oldFiles:
             largeFiles.age = .oneYear
+            largeFiles.place = .personal
             navigate(.largeFiles)
         case nil: break
         }

@@ -97,7 +97,7 @@ enum KeelTools {
 
             AITool(
                 name: "get_large_files",
-                description: "Lists the largest files in the user's own folders (Desktop, Documents, Downloads and so on; not Library or apps) with size, folder, kind and when each was last opened. Takes a while the first time. Call this when the user asks what takes up space in their files, about old downloads, videos or disk images. Keel AI cannot remove them; point the user to Keel's Büyük Dosyalar section.",
+                description: "Lists the largest files in the user's own folders (Desktop, Documents, Downloads and so on) and in apps' data in ~/Library (marked app_data_of, e.g. a Docker disk, game files, Xcode data), with size, folder, kind and when each was last opened. Takes a while the first time. Call this when the user asks what takes up space in their files, about old downloads, videos or disk images. Keel AI cannot remove them; point the user to Keel's Büyük Dosyalar section.",
                 inputSchema: noInput
             ) { _ in
                 let files = await largeFiles.filesWhenReady()
@@ -225,13 +225,16 @@ enum KeelTools {
         let shown = files.prefix(compact ? 6 : 20)
         let list: [JSONValue] = shown.map { file in
             let days: JSONValue = file.lastActivity.map { .number(Double(Int(now.timeIntervalSince($0) / 86_400))) } ?? .null
-            return .object([
+            var entry: [String: JSONValue] = [
                 "name": .string(file.url.lastPathComponent),
                 "folder": .string(FileText.folder(file.url)),
                 "size_mb": .number(Double(file.sizeBytes / 1_000_000)),
                 "kind": .string(file.kind.rawValue),
                 "days_since_opened": days,
-            ])
+            ]
+            // Data an app keeps in ~/Library, e.g. a virtual machine disk or a game.
+            if let location = file.appData { entry["app_data_of"] = .string(location.owner) }
+            return .object(entry)
         }
         let total = files.reduce(0) { $0 + $1.sizeBytes }
         return .object([
