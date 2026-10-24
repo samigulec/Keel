@@ -222,7 +222,7 @@ enum KeelTools {
 
     static func largeFilesSummary(_ files: [LargeFile], compact: Bool = false) -> JSONValue {
         let now = Date()
-        let shown = files.prefix(compact ? 6 : 20)
+        let shown = files.prefix(compact ? 6 : 30)
         let list: [JSONValue] = shown.map { file in
             let days: JSONValue = file.lastActivity.map { .number(Double(Int(now.timeIntervalSince($0) / 86_400))) } ?? .null
             var entry: [String: JSONValue] = [

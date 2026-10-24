@@ -185,7 +185,8 @@ final class LargeFilesModel {
         let report = await Task.detached(priority: .userInitiated) {
             LargeFileRemover.standard().perform(chosen, runningBundleIDs: bundleIDs, runningNames: names)
         }.value
-        let removed = Set(report.removed.map(\.id))
+        // Files deleted elsewhere since the scan leave the list too.
+        let removed = Set((report.removed + report.missing).map(\.id))
         files.removeAll { removed.contains($0.id) }
         selection.subtract(removed)
         lastReport = report

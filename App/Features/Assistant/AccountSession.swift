@@ -310,7 +310,7 @@ enum KeelContext {
             : .string("not read yet; Keel reads them when you propose remove_login_items")
         // Scanning the home folder is slow; share it only once the user has scanned.
         let bigFiles: JSONValue = largeFiles.phase == .ready
-            ? KeelTools.largeFilesSummary(largeFiles.files, compact: true)
+            ? KeelTools.largeFilesSummary(largeFiles.files)
             : .string("not scanned yet")
         let installed = await step("get_installed_apps") {
             KeelTools.installedApps(await applications.listWhenReady(), compact: true)

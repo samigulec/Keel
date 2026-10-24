@@ -95,6 +95,28 @@ struct LargeFilesTests {
         #expect(FileManager.default.fileExists(atPath: prefs.path))
     }
 
+    @Test func leavesAppProgramsAndDatabasesOut() throws {
+        let sandbox = try Sandbox()
+        let tool = try sandbox.write("Library/Application Support/Claude/claude-code/2.1/claude", bytes: 90_000)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+        try sandbox.write("Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/account/postbox/db/db_sqlite", bytes: 90_000)
+        try sandbox.write("Library/Application Support/App/store.realm", bytes: 90_000)
+        try sandbox.write("Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/account/media/local-file-1", bytes: 80_000)
+
+        let files = LargeFileScanner(home: sandbox.home, minimumBytes: 40_000, includeAppData: true, lastActivity: { _ in nil }).scan()
+        #expect(files.map(\.url.lastPathComponent) == ["local-file-1"])
+    }
+
+    @Test func fileGoneSinceTheScanIsReportedNotFailed() throws {
+        let sandbox = try Sandbox()
+        let gone = sandbox.home.appendingPathComponent("Downloads/Brave-Browser-arm64.dmg")
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let report = LargeFileRemover(home: sandbox.home, policy: LargeFileRemover.policy(home: sandbox.home), remover: remover, log: nil)
+            .perform([LargeFile(url: gone, sizeBytes: 232_000_000, lastActivity: nil, kind: .diskImage)])
+        #expect(report.missing.map(\.url) == [gone])
+        #expect(report.skipped.isEmpty && report.failed.isEmpty && report.removed.isEmpty)
+    }
+
     @Test func ownersMatchRunningApps() {
         let teams = AppDataLocation(area: "Group Containers", owner: "UBF8T346G9.com.microsoft.teams")
         #expect(teams.belongs(toAnyOf: ["com.microsoft.teams"], names: []))

@@ -163,7 +163,7 @@ enum CompanionContext {
             guard !chosen.isEmpty else {
                 return ScreenContext(section: section, detail: "\(largeFiles.visibleFiles.count) files shown.")
             }
-            let names = chosen.prefix(8).map { "\($0.url.lastPathComponent) (\(ByteFormat.string($0.sizeBytes)), \(FileText.lastOpened($0.lastActivity)))" }
+            let names = chosen.prefix(8).map { "\(FileText.folder($0.url))/\($0.url.lastPathComponent) (\(ByteFormat.string($0.sizeBytes)), \(FileText.lastOpened($0.lastActivity)))" }
             return ScreenContext(section: section, detail: "Selected files: " + names.joined(separator: "; ") + ".")
 
         case .applications:

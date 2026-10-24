@@ -84,6 +84,15 @@ public struct LargeFileScanner: Sendable {
         "FileProvider", "Dock", "DifferentialPrivacy", "CrashReporter", "iCloud",
     ]
 
+    /// Files an app cannot do without even when it is closed: its programs
+    /// (e.g. a bundled command-line tool) and its databases.
+    public static func isEssential(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        let databases: Set<String> = ["db", "sqlite", "sqlite3", "sqlitedb", "realm", "ldb", "wal", "shm"]
+        if databases.contains(url.pathExtension.lowercased()) || name.contains("sqlite") { return true }
+        return FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
     /// Where `url` sits in an app's data, or nil when it is not in an area
     /// Keel scans or is Apple's own data. Links are resolved on both sides
     /// (on macOS /var is /private/var).
@@ -184,7 +193,9 @@ public struct LargeFileScanner: Sendable {
                 guard let values = try? url.resourceValues(forKeys: Set(keys)),
                       values.isRegularFile == true, values.isSymbolicLink != true else { continue }
                 let size = Self.size(values)
-                if size >= minimumBytes { found.append((url, size, appData)) }
+                guard size >= minimumBytes else { continue }
+                if appData != nil, Self.isEssential(url) { continue }
+                found.append((url, size, appData))
             }
         }
 
@@ -216,6 +227,8 @@ public struct LargeFilesReport: Sendable {
     }
 
     public var removed: [LargeFile] = []
+    /// Already gone, e.g. deleted in Finder since the scan.
+    public var missing: [LargeFile] = []
     public var skipped: [Outcome] = []
     public var failed: [Outcome] = []
     public var trashed: [TrashedItem] = []
@@ -275,6 +288,12 @@ public struct LargeFileRemover: Sendable {
                     bytes: file.sizeBytes, outcome: outcome, detail: detail
                 ))
             }
+            // Not there any more (lstat: a dangling link still counts as there).
+            if (try? FileManager.default.attributesOfItem(atPath: file.url.path)) == nil {
+                report.missing.append(file)
+                record(.skipped, "already gone")
+                continue
+            }
             if case .denied(let reason) = policy.evaluate(file.url) {
                 report.skipped.append(.init(url: file.url, message: reason.description))
                 record(.skipped, reason.description)
@@ -288,6 +307,11 @@ public struct LargeFileRemover: Sendable {
                 guard let location = LargeFileScanner.appDataLocation(of: resolved, home: realHome) else {
                     report.skipped.append(.init(url: file.url, message: "Library'nin korunan bir yerinde"))
                     record(.skipped, "protected part of Library")
+                    continue
+                }
+                if LargeFileScanner.isEssential(resolved) {
+                    report.skipped.append(.init(url: file.url, message: "uygulamanın programı ya da veritabanı; silinirse uygulama bozulur"))
+                    record(.skipped, "app's program or database")
                     continue
                 }
                 if location.belongs(toAnyOf: runningBundleIDs, names: runningNames) {

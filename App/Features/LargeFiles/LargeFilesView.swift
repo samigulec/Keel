@@ -101,7 +101,7 @@ private struct StartCard: View {
             Text("Henüz taranmadı")
                 .font(.keel(20, .extraBold))
                 .foregroundStyle(Palette.text)
-            Text("Tarama yalnızca okur. Masaüstü, Belgeler, İndirilenler gibi klasörlerindeki ve uygulamaların ~/Library'deki verilerindeki büyük dosyaları bulur. Apple'ın sistem verileri, Mail, Mesajlar ve iCloud'a dokunulmaz.")
+            Text("Tarama yalnızca okur. Masaüstü, Belgeler, İndirilenler gibi klasörlerindeki ve uygulamaların ~/Library'deki verilerindeki büyük dosyaları bulur. Apple'ın sistem verileri, Mail, Mesajlar, iCloud ve uygulamaların programları ile veritabanları listelenmez.")
                 .font(.keel(14, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)
@@ -318,18 +318,27 @@ private struct RemovalBanner: View {
     let report: LargeFilesReport
     let undo: () -> Void
 
+    private var clean: Bool { report.failed.isEmpty && report.skipped.isEmpty }
+
+    /// One line per file that was not moved, and why.
+    private var lines: [String] {
+        report.missing.map { "\($0.url.lastPathComponent): artık yerinde yok (başka yerden silinmiş); listeden çıkarıldı" }
+            + (report.skipped + report.failed).map { "\($0.url.lastPathComponent): \($0.message)" }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: report.failed.isEmpty && report.skipped.isEmpty ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(report.failed.isEmpty && report.skipped.isEmpty ? Palette.mintText : Palette.warningText)
+            Image(systemName: clean ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(clean ? Palette.mintText : Palette.warningText)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(ByteFormat.string(report.freedBytes)) Çöp Kutusu'na taşındı")
+                Text(report.removed.isEmpty ? "Hiçbir dosya taşınmadı" : "\(ByteFormat.string(report.freedBytes)) Çöp Kutusu'na taşındı")
                     .font(.keel(15, .bold))
                     .foregroundStyle(Palette.text)
-                ForEach(Array((report.skipped + report.failed).prefix(3).enumerated()), id: \.offset) { _, outcome in
-                    Text("\(outcome.url.lastPathComponent): \(outcome.message)")
+                ForEach(Array(lines.prefix(4).enumerated()), id: \.offset) { _, line in
+                    Text(line)
                         .font(.keel(12, .medium))
                         .foregroundStyle(Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer()
