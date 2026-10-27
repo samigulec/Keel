@@ -13,7 +13,8 @@ Keel'de bir geliştirme döngüsü çalıştır. Konu: **$ARGUMENTS**
 
 ## 2. Hazırlık
 - `git status` temiz olmalı. Değilse dur ve kullanıcıya söyle.
-- `main`'den yeni dal aç: `claude/<slug>` (CI bu dallarda çalışır).
+- Varsayılan dalı bul: `git remote show origin | sed -n 's/.*HEAD branch: //p'`.
+  Ondan yeni dal aç: `claude/<slug>` (CI bu dallarda çalışır).
 
 ## 3. Mahkeme
 `.claude/commands/mahkeme.md` dosyasındaki adımları (0–5) bu konu için
@@ -38,7 +39,7 @@ Sonra `karar.md`'ye bak:
   `xcodegen generate && xcodebuild build -project Keel.xcodeproj -scheme Keel -destination 'platform=macOS'`.
 
 ## 5. Denetim
-- `hakim` ajanını denetim için çağır: `karar.md` + `git diff main...HEAD`.
+- `hakim` ajanını denetim için çağır: `karar.md` + `git diff origin/<varsayılan dal>...HEAD`.
 - Değişiklik silme, `SafetyPolicy`, yetki ya da Keel AI veri akışına
   dokunuyorsa `juri-guvenlik`'i de diff üzerinde çağır.
 - DÜZELTME GEREKLİ ise düzelt ve tekrar denetlet. En fazla 2 tur; hâlâ
@@ -48,6 +49,6 @@ Sonra `karar.md`'ye bak:
 - `docs/PLAN.md`'de ilgili maddeyi `[x]` yap (yalnızca tamamen bittiyse).
 - Commit et, dalı gönder, PR aç. PR açıklamasında: karar özeti, oy
   dağılımı, `karar.md` linki, test sonucu.
-- **`main`'e asla doğrudan gönderme, PR'ı kendin birleştirme.** Birleştirme
+- **Varsayılan dala asla doğrudan gönderme, PR'ı kendin birleştirme.** Birleştirme
   kararı kullanıcının.
 - Kullanıcıya kısa rapor: ne yapıldı, PR linki, bilinen açıklar.

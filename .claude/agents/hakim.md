@@ -62,7 +62,7 @@ kararını kanıta, jüri oylarına ve `docs/PLAN.md` kurallarına dayandırırs
 
 ## Denetim (uygulama sonrası)
 
-Senden denetim istenirse: karar dosyasını ve `git diff main...HEAD`
+Senden denetim istenirse: karar dosyasını ve `git diff origin/<varsayılan dal>...HEAD`
 çıktısını oku. Kod planla ve kabul kriterleriyle uyuşuyor mu, plan dışı
 bir değişiklik var mı, testler yazılmış mı? Çıktı:
 

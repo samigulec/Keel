@@ -23,5 +23,5 @@ Küçük hata düzeltmeleri, yazım ve stil için gerekmez.
 - Mantık `Packages/KeelCore`'da (Linux'ta test edilebilir), arayüz `App/`'te.
 - `Keel.xcodeproj` üretilen dosyadır; proje ayarı için `project.yml`.
 - Testler: `swift test --package-path Packages/KeelCore`.
-- `main`'e doğrudan gönderme yok, PR'ı ajan birleştirmez.
+- Varsayılan dala doğrudan gönderme yok, PR'ı ajan birleştirmez.
 - Hakim `İNSAN ONAYI GEREKİR: EVET` dediyse kod yazılmaz; kullanıcıya sorulur.
