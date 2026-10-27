@@ -7,9 +7,11 @@ Keel'de bir geliştirme döngüsü çalıştır. Konu: **$ARGUMENTS**
 
 ## 1. Konuyu belirle
 - Konu verildiyse onu kullan.
-- Boşsa `docs/PLAN.md` yol haritasında, en erken fazdaki ilk işaretlenmemiş
-  (`[x]` olmayan) maddeyi seç. Faz 3 ve Faz 4 maddelerini atla (yetki,
-  imza ve yayın konuları insan işi). Seçtiğin maddeyi kullanıcıya söyle.
+- Boşsa `docs/PLAN.md` yol haritasında, en erken fazdaki ilk `- [ ]`
+  maddesini seç. Kutucuksuz maddeler ve `- [x]` olanlar aday değildir.
+  Faz 3 ve Faz 4 maddelerini atla (yetki, imza ve yayın konuları insan
+  işi). Hiç `- [ ]` madde yoksa dur ve kullanıcıya sor. Seçtiğin maddeyi
+  kullanıcıya söyle.
 
 ## 2. Hazırlık
 - `git status` temiz olmalı. Değilse dur ve kullanıcıya söyle.

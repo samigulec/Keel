@@ -88,6 +88,10 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
 
 ## 5. Yol haritası
 
+> Açık işler `- [ ]`, bitenler `- [x]` ile işaretlidir. `/gelistir` yalnızca
+> `- [ ]` maddelerinden seçer. Kutucuksuz maddeler bilgi ya da tamamlanmış
+> eski fazlardır.
+
 ### Faz 0 — İskelet
 - XcodeGen projesi, `KeelCore` paketi, boş SwiftUI penceresi + kenar çubuğu
 - Tasarım sistemi: renkler (Deep Hull `#0F1A17`, Keel Green `#2FBF8F`,
@@ -112,10 +116,12 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
   eşleştirme, kullanıcıya tek tek gösterilir), sıfırlama, Intel/Universal,
   App Store kaynağı, kullanılmayan uygulamalar (90+ gün)
 - [x] Performans: ağ hızı (Stats gibi), süreç bazında işlemci kullanımı
-- Sahipsiz artıklar (kaldırılmış uygulamalardan kalanlar), uygulama güncelleyici
+- [ ] Sahipsiz artıklar (kaldırılmış uygulamalardan kalanlar)
+- [ ] Uygulama güncelleyici
 - [x] Sensörler: sıcaklık (HID / SMC) ve fanlar (SMC), salt okunur
-- Menü çubuğunda canlı grafikler
-- [x] Büyük ve eski dosyalar bulucu; kopya dosyalar sonra
+- [ ] Menü çubuğunda canlı grafikler
+- [x] Büyük ve eski dosyalar bulucu
+- [ ] Kopya dosya bulucu
 - [x] Geri al (temizlik, uygulama kaldırma, büyük dosyalar)
 - [x] Akıllı Tarama: tek tıkla bakım, sağlık puanı ve bulgular
 - [x] Keel AI sohbet geçmişi, her ekranda yol arkadaşı paneli
@@ -135,7 +141,7 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
       arka plan servisleri tek yerde; Performans yalnızca canlı ölçümler ve fanlar
 - [x] Keel AI eylem kartları: servis/giriş öğesi kapatma, uygulama
       kapatma, fan ayarı; kullanıcı onaylamadan hiçbir şey değişmez
-- Kullanıcı LaunchAgent'larını aç/kapat
+- [ ] Kullanıcı LaunchAgent'larını aç/kapat
 
 ### Faz 3 — Yönetici yetkisi gerektirenler
 - `SMAppService` ile privileged helper + XPC
