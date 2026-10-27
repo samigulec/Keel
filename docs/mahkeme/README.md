@@ -50,3 +50,4 @@ Ajan tanımları: `.claude/agents/`. Komutlar: `.claude/commands/`.
 
 | Tarih | Konu | Karar | İnsan onayı | Kayıt |
 |---|---|---|---|---|
+| 2026-10-27 | Kopya dosya bulucu | DEĞİŞTİRİLEREK KABUL (5 KOŞULLU, veto yok) | EVET: öncelik + Adım 0 ölçümü | [2026-10-27-kopya-dosya-bulucu](2026-10-27-kopya-dosya-bulucu/karar.md) |
