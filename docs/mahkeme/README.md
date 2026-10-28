@@ -50,3 +50,4 @@ Ajan tanımları: `.claude/agents/`. Komutlar: `.claude/commands/`.
 
 | Tarih | Konu | Karar | İnsan onayı | Kayıt |
 |---|---|---|---|---|
+| 2026-10-28 | Sahipsiz artıklar | DEĞİŞTİRİLEREK KABUL: yalnızca Aşama 0 salt okunur ölçüm (3 KOŞULLU / 2 RED, veto yok) | EVET: öncelik, ölçüm, eşik, araç biçimi | [2026-10-28-sahipsiz-artiklar](2026-10-28-sahipsiz-artiklar/karar.md) |
