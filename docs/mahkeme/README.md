@@ -50,3 +50,4 @@ Ajan tanımları: `.claude/agents/`. Komutlar: `.claude/commands/`.
 
 | Tarih | Konu | Karar | İnsan onayı | Kayıt |
 |---|---|---|---|---|
+| 2026-10-29 | Uygulama güncelleyici | DEĞİŞTİRİLEREK KABUL: yalnızca Aşama 0 ağsız, salt okunur kaynak dağılımı ölçümü (5 KOŞULLU, veto yok) | EVET: öncelik, ortak ölçüm, ölçüm ortamı, eşik, ağ ilkesi | [2026-10-29-uygulama-guncelleyici](2026-10-29-uygulama-guncelleyici/karar.md) |
