@@ -50,3 +50,4 @@ Ajan tanımları: `.claude/agents/`. Komutlar: `.claude/commands/`.
 
 | Tarih | Konu | Karar | İnsan onayı | Kayıt |
 |---|---|---|---|---|
+| 2026-10-30 | Kullanıcı LaunchAgent'larını aç/kapat | DEĞİŞTİRİLEREK KABUL: madde yeni özellik değil, kapanış işi; servis aç/kapat için ayrı `startup.log` kaydı, `.user`/çift-etiket testleri, "süreç durdurulur" uyarısı; satır 144 Mac doğrulamasına kadar `[x]` olmaz (5 KOŞULLU, veto yok) | HAYIR (5 soru GUNDEM'de, PR'ı bekletmez) | [2026-10-30-kullanici-launchagent-ac-kapat](2026-10-30-kullanici-launchagent-ac-kapat/karar.md) |
