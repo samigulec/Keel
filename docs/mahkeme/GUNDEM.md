@@ -66,3 +66,23 @@ Cevap:
   dayanıyor; `.rtfd`, sanal makine paketleri gibi bilinmeyen paketlerin içi
   normal klasör sanılabilir. (Kaynak: kopya dosya bulucu kararı, kapsam dışı
   notu)
+- `LargeFileRemover` kendi doğrulamasında tüm ev klasörünü izinli kök sayıyor
+  ve tarayıcının dışarıda bıraktığı yerleri (gizli klasörler, paket içleri)
+  `perform` içinde yeniden kontrol etmiyor; `~/.ssh/...` ya da
+  `~/Documents/X.photoslibrary/...` içindeki bir dosya Çöp'e taşınabilir
+  (§2.3, §2.4). Bugün tek çağıran yalnızca tarama sonucunu verdiği için bu
+  derinlemesine savunma eksiği; testler de bu iki durumu denemiyor.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/LargeFiles/LargeFiles.swift:267`,
+  `allowedRoots: [home]`; dışlamalar yalnızca tarayıcıda, satır 166-186)
+- Silme sonrası işlem günlüğü `try?` ile yazılıyor; günlük yazılamazsa dosya
+  yine de Çöp'e taşınıyor ve kullanıcıya bir şey söylenmiyor, bu da §2.7
+  "Her işlem kaydedilir" ilkesini sessizce çiğner. Raporlarda günlük hatası
+  alanı ve bu yol için test yok. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:55`;
+  aynı kalıp `Uninstaller.swift:143`, `LargeFiles.swift:286`,
+  `TrashRestorer.swift:47,69`)
+- `SafetyPolicy`'nin "başka diske taşan yol silinmez" kuralı (§2.5,
+  `.differentVolume`) için hiç test yok; kural bozulsa testler yeşil kalır.
+  Linux'ta test edebilmek için `deviceID` enjekte edilebilir yapılabilir.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:94`;
+  `Tests/` altında `differentVolume` geçmiyor)
