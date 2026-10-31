@@ -116,3 +116,33 @@ Cevap:
   `App/Features/Performance/PerformanceModel.swift:83-89`,
   `Packages/KeelCore/Sources/KeelCore/Startup/LaunchItems.swift:81`,
   `App/Features/Assistant/ActionProposals.swift:103`)
+- Keel AI "Girişte açılmasın" kartı, kullanıcı iptal edince bile başarılı
+  görünüyor. `apply` yalnızca `.failed` sonucunu hata sayıyor;
+  `removeLoginItem` `.cancelled` döndürürse sorun listesi boş kalıyor, kart
+  "N uygulama artık girişte açılmayacak" diyor ve Geri al düğmesi çıkıyor,
+  oysa hiçbir şey değişmedi. Fan dalı `.cancelled` durumunu ayrı ele alıyor,
+  bu dal almıyor; `PerformanceModel` de `startupMessage`'ı `.cancelled` için
+  nil olan `errorMessage` ile dolduruyor. İptalin gerçekte hangi koşulda
+  oluştuğu Mac'te doğrulanmadı. Onay sonrası sessiz yanlış durum (§2.2).
+  App katmanı olduğu için test yok. (Kaynak:
+  `App/Features/Assistant/ActionProposals.swift:181-184`,
+  `App/Features/Performance/SystemControl.swift:13-17,42`,
+  `App/Features/Performance/PerformanceModel.swift:139-143`)
+- Geri alma başarısız olsa bile Keel AI temizlik kartı "Geri alındı; öğeler
+  eski yerlerinde" yazıyor. `undoProposal` önce `undoableProposals` kaydını
+  siliyor, sonra `Undo.restore` sonucuna bakmadan `undoneProposals.insert(id)`
+  yapıyor. Tüm öğeler başarısız olsa da (Çöp boşaltılmış, eski yerde aynı
+  adlı öğe var) kart geri alındı diyor, Geri al düğmesi kayboluyor ve yeniden
+  denenemiyor; hata yalnızca sohbetteki ayrı bildirimde kalıyor (§2.1
+  güveninin dayanağı geri alınabilirlik). Test yok. (Kaynak:
+  `App/Features/Assistant/AssistantModel.swift:406-413`,
+  `App/Features/Assistant/AssistantView.swift:398-401`)
+- Temizlik onayı eski tarama sonucuna dayanıyor; `CleanupExecutor.perform`
+  silmeden önce yaş/boyut/değişiklik koşulunu yeniden denetlemiyor, yalnızca
+  çalışan uygulamayı ve `SafetyPolicy`'yi kontrol ediyor. Öğeler yola göre
+  eşleşiyor ve taramanın yaşına bakılmıyor; tarama ile onay arasında aynı
+  yola yeni bir dosya konursa o da onaylanmış sayılıp Çöp'e taşınabilir.
+  Onaylanan ile silinen ayrışabiliyor (§2.2 "yalnızca seçilen öğeler").
+  Yürütücü testlerinde bu senaryo yok. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:46-98`,
+  `App/Features/Cleanup/CleanupModel.swift:137-150`)
