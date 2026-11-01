@@ -86,9 +86,152 @@ Cevap:
   Linux'ta test edebilmek için `deviceID` enjekte edilebilir yapılabilir.
   (Kaynak: `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:94`;
   `Tests/` altında `differentVolume` geçmiyor)
+- Keel AI, hesap sağlayıcılarına (Claude/ChatGPT) kişisel dosya ADLARINI
+  ve klasörlerini gönderiyor; PLAN "özet sistem verisi, içerik asla" der
+  ama ad/klasör özet değil. `largeFilesSummary` her büyük dosyanın adını
+  ve klasörünü (Documents/Desktop dahil, 30 adede kadar), `cleanupSummary`
+  Downloads/Çöp öğelerinin yollarını yazıyor; `KeelContext.gather` bunları
+  her mesaja otomatik ekliyor. Kullanıcıya gönderilecekleri gösteren ya da
+  kapatan bir ayar yok; Ayarlar metni yalnızca "içerik gönderilmez" diyor.
+  Ad gizleme (tür+boyut+yaş) ya da açık onay mahkemelik. (Kaynak:
+  `App/Features/Assistant/KeelTools.swift:228-229,435-437`,
+  `App/Features/Assistant/AccountSession.swift:293-298,312-314`,
+  `App/Features/Settings/SettingsView.swift:80`)
+- Fan kontrolü yönetici şifresiyle root olarak `Bundle.main.executablePath`
+  çalıştırıyor; Keel kullanıcının yazabildiği bir konumdaysa (DerivedData,
+  ~/Applications, sürükle-bırak kurulum) dosya şifre isteminden önce
+  değiştirilirse istem "Keel" der, root'ta başka ikili çalışır (§2.8).
+  Yardımcı kurulumu da aynı yolu root'a ait kopyaya çevirip kalıcı LaunchDaemon
+  yapıyor. Çalıştırmadan önce kod imzası/sahiplik doğrulaması yok; App
+  katmanı olduğu için testi de yok. (Kaynak:
+  `App/Features/Performance/SystemControl.swift:116-122,139-144`,
+  `Packages/KeelCore/Sources/KeelCore/Hardware/FanHelper.swift:93`)
+- `launchctl print-disabled` başarısız olursa `overrides` sessizce `[:]`
+  döndürüyor; `refreshLaunchItems` yine `launchItemsLoaded = true` yapıyor ve
+  tarayıcı `overrides[label] ?? plist["Disabled"] ?? false` ile kullanıcının
+  kapattığı servisleri "açık" gösteriyor. Keel AI de `item.isDisabled ==
+  enable` süzgecinde bu yanlış duruma güvenip "değiştirilecek bir şey yok"
+  diyor. Hata kullanıcıya hiç söylenmiyor; `overrides` hata yolu için test
+  yok. (Kaynak: `App/Features/Performance/SystemControl.swift:62-65`,
+  `App/Features/Performance/PerformanceModel.swift:83-89`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchItems.swift:81`,
+  `App/Features/Assistant/ActionProposals.swift:103`)
+- Keel AI "Girişte açılmasın" kartı, kullanıcı iptal edince bile başarılı
+  görünüyor. `apply` yalnızca `.failed` sonucunu hata sayıyor;
+  `removeLoginItem` `.cancelled` döndürürse sorun listesi boş kalıyor, kart
+  "N uygulama artık girişte açılmayacak" diyor ve Geri al düğmesi çıkıyor,
+  oysa hiçbir şey değişmedi. Fan dalı `.cancelled` durumunu ayrı ele alıyor,
+  bu dal almıyor; `PerformanceModel` de `startupMessage`'ı `.cancelled` için
+  nil olan `errorMessage` ile dolduruyor. İptalin gerçekte hangi koşulda
+  oluştuğu Mac'te doğrulanmadı. Onay sonrası sessiz yanlış durum (§2.2).
+  App katmanı olduğu için test yok. (Kaynak:
+  `App/Features/Assistant/ActionProposals.swift:181-184`,
+  `App/Features/Performance/SystemControl.swift:13-17,42`,
+  `App/Features/Performance/PerformanceModel.swift:139-143`)
+- Geri alma başarısız olsa bile Keel AI temizlik kartı "Geri alındı; öğeler
+  eski yerlerinde" yazıyor. `undoProposal` önce `undoableProposals` kaydını
+  siliyor, sonra `Undo.restore` sonucuna bakmadan `undoneProposals.insert(id)`
+  yapıyor. Tüm öğeler başarısız olsa da (Çöp boşaltılmış, eski yerde aynı
+  adlı öğe var) kart geri alındı diyor, Geri al düğmesi kayboluyor ve yeniden
+  denenemiyor; hata yalnızca sohbetteki ayrı bildirimde kalıyor (§2.1
+  güveninin dayanağı geri alınabilirlik). Test yok. (Kaynak:
+  `App/Features/Assistant/AssistantModel.swift:406-413`,
+  `App/Features/Assistant/AssistantView.swift:398-401`)
+- Temizlik onayı eski tarama sonucuna dayanıyor; `CleanupExecutor.perform`
+  silmeden önce yaş/boyut/değişiklik koşulunu yeniden denetlemiyor, yalnızca
+  çalışan uygulamayı ve `SafetyPolicy`'yi kontrol ediyor. Öğeler yola göre
+  eşleşiyor ve taramanın yaşına bakılmıyor; tarama ile onay arasında aynı
+  yola yeni bir dosya konursa o da onaylanmış sayılıp Çöp'e taşınabilir.
+  Onaylanan ile silinen ayrışabiliyor (§2.2 "yalnızca seçilen öğeler").
+  Yürütücü testlerinde bu senaryo yok. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:46-98`,
+  `App/Features/Cleanup/CleanupModel.swift:137-150`)
+- Uygulama kaldırıcı, uygulamanın kendisi kaldırılamasa bile ilgili dosyalarını
+  Çöp'e taşıyor. `perform` hedef listesini (uygulama + dosyalar) bağımsız
+  döngüyle işliyor; uygulama `evaluateApp` ile reddedilirse ya da
+  `moveToTrash` hata verirse (ör. Finder yolunda yönetici şifresi iptali,
+  "uygulama klasörlerinin dışında", "bir kısayol") döngü `continue` ile
+  sürüyor ve tercihler, Application Support, kapsayıcılar yine taşınıyor.
+  Sonuç: uygulama yerinde duruyor ama ayarları/verisi gitmiş; kullanıcı
+  "kaldır" dedi ama yarım ve tutarsız bir durum oluşuyor. Geri alma var ama
+  kullanıcı bunun için raporu okuyup düğmeye basmak zorunda (§2.2 "yalnızca
+  seçilen öğeler" ruhu: onaylanan işlem uygulama+dosyalar bütünüydü). Test
+  yok: mevcut testler yalnızca hepsinin başarılı olduğu ve uygulamanın baştan
+  atlandığı, dosyası olmayan durumu deniyor. Çözüm yönü: `removesApp` iken
+  uygulama başarısızsa dosyaları atla. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Applications/Uninstaller.swift:134-165`,
+  `Packages/KeelCore/Tests/KeelCoreTests/ApplicationsTests.swift:143-177`)
+- `AppRemover` (uygulama kaldırma için gerçek `FileRemover`), `trashItem`
+  neden başarısız olursa olsun, `.app` ise hatayı yutup `NSWorkspace.recycle`
+  ile Finder yoluna düşüyor; bu yol yönetici şifresi istiyor. §2.8 "Root
+  yetkisi MVP'de yok" ve PLAN'da uygulama kaldırma için böyle bir istisna
+  yazılı değil (PLAN yalnızca servis aç/kapat ve fan için şifreyi anıyor).
+  Ayrıca 120 sn zaman aşımında `userCancelled` fırlatılıyor ama `recycle`
+  isteği iptal edilmiyor: kullanıcı şifreyi geç girerse uygulama Çöp'e gider,
+  oysa rapor "başarısız" der, `report.trashed`'e eklenmediği için Geri al
+  onu kapsamaz ve günlüğe `removed` yerine `failed` yazılır (§2.7). Hata
+  türü ayrımı (izin / disk dolu / kullanımda) yok. App katmanı olduğu için
+  test yok; zaman aşımı yarışı Mac'te doğrulanmadı. (Kaynak:
+  `App/Features/Applications/ApplicationsModel.swift:301-339`,
+  `Packages/KeelCore/Sources/KeelCore/Applications/Uninstaller.swift:153-164`)
+- `TrashRestorer.restore` geri koyduğu öğenin hâlâ Keel'in taşıdığı öğe
+  olduğunu doğrulamıyor; yalnızca `inTrash` yolunda bir şey var mı ve yol
+  adında `.Trash` geçiyor mu diye bakıyor. Kullanıcı Çöp'ü boşaltıp aynı adlı
+  başka bir dosyayı silerse macOS onu aynı çıplak adla (`notes.txt`) Çöp'e
+  koyar; Keel'in Geri al düğmesi (temizlik, kaldırma, büyük dosyalar ve Keel
+  AI kartı için `lastReport`/`undoableProposals` oturum boyunca saklanıyor)
+  bu yabancı dosyayı Keel'in eski yoluna taşır ve günlüğe `restored` yazar.
+  Boyut (`TrashedItem.bytes`) kayıtlı ama karşılaştırılmıyor. Kullanıcıya
+  yanlış öğe "geri alındı" diye gösterilir (§2.1 güveninin dayanağı geri
+  alınabilirlik, §2.7). Testler yalnızca Çöp dışı yolu, eski yerde çakışmayı
+  ve Çöp'te artık olmayan öğeyi deniyor; "aynı yola başka öğe geldi" yok.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Actions/TrashRestorer.swift:53-68`,
+  `Packages/KeelCore/Tests/KeelCoreTests/UndoTests.swift:35-50`)
 - Keel AI servis kartı `problems` satır sayısını başarısız servis sayısı gibi
   kullanıyor. Servis değişip yalnızca işlem kaydı yazılamazsa kart hata gösterir,
   "Geri al" çıkmaz ve geri almada `undone: false` döner; toplu sistem isteminde
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Eski indirmeler kuralı, klasör öğelerinin "yaşını" klasörün kendi
+  değişiklik tarihinden alıyor; içindeki dosyalar yakın zamanda değişmiş
+  olsa bile klasör 90 günden eski sayılabilir. `ChildrenSource` Downloads'ın
+  doğrudan çocuklarına `context.lastActivity(child)` uyguluyor;
+  `FileActivity.lastActivity` ise yalnızca öğenin kendi `mtime`, `addedToDirectory`
+  ve Spotlight `kMDItemLastUsedDate` değerlerinin en büyüğünü alıyor, içeriğe
+  inmiyor. Bir klasörün `mtime`'ı yalnızca içine girdi eklenince ya da
+  silinince değişir; alt dosya düzenlenince değişmez. Aylar önce indirilip
+  açılmış, içindeki dosyalar bugün düzenlenen bir proje klasörü ya da
+  açılmış arşiv "90 gündür dokunulmamış" diye listelenir. Spotlight tarihi
+  klasörlerde genelde boştur (Mac'te doğrulanmadı). Kural varsayılan
+  seçili değil ve her şey Çöp'e gidiyor, yani zarar sınırlı; ama liste
+  "dokunulmamış" diye yanlış güvence veriyor (§2.2 "önce göster": gösterilen
+  bilgi yanlış). Testler yalnızca düz dosyalarla `daysOld` kullanıyor, içi
+  yeni dosyalı eski klasör senaryosu yok. Çözüm yönü: klasörlerde alt
+  ağacın en yeni değişiklik tarihini kullanmak ya da klasörleri atlamak.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:89-93`,
+  `Packages/KeelCore/Sources/KeelCore/Scanning/FileActivity.swift:12-36`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:145`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupScannerTests.swift:89-96`)
+- "Çalışan uygulamanın önbelleğine dokunulmaz" (§2.6) kuralı yalnızca
+  `Candidate.owner` doluysa işliyor; sahibi bilinmeyen öğeler hiç
+  denetlenmiyor. Genel önbellek kuralı `.bundleIDFromName` kullanıyor ve adı
+  nokta içermeyen klasörlerde (`Spotify`, `Slack`, `JetBrains` gibi) `owner`
+  nil oluyor. Günlük kuralındaki `AgedFilesSource` her zaman `owner: nil`
+  veriyor, geliştirici önbelleklerinin `FixedPathsSource` girdileri de
+  (`Homebrew`, `pip`, `yarn`...) öyle. Tarayıcı `scan` içindeki çalışan
+  uygulama süzgeci `if let owner = candidate.owner` ile başladığı için bu
+  öğeler çalışan uygulamanın dosyası olsa da atlanmıyor; örneğin açık
+  bir uygulamanın 7 günden eski ama hâlâ kullanımda günlük dosyası ya da
+  `brew` çalışırken `Homebrew` önbelleği listelenip (geliştirici kuralı
+  varsayılan kapalı, günlük kuralı varsayılan AÇIK) onayla Çöp'e
+  taşınabilir. Hangi gerçek klasörlerin hangi uygulamaya ait olduğu Mac'te
+  doğrulanmadı; ama kod yolu net. Mevcut testler yalnızca `com.spotify.client`
+  gibi nokta içeren adları ve bundle ID önekini deniyor; `owner == nil` ile
+  çalışan uygulama senaryosu yok. Çözüm yönü: bilinen eşlemeler
+  (`Spotify` -> `com.spotify.client`) ya da sahibi bilinmeyen öğeler için
+  ayrı, görünür bir uyarı. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:101,133`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupScanner.swift:66`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:97,123-125`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupScannerTests.swift:44-64`)
