@@ -67,30 +67,52 @@ enum SystemControl {
 
     /// Switches services and returns the problems, one line each. The
     /// session's run as the user; the system's together, behind one
-    /// administrator prompt.
+    /// administrator prompt. Each one goes in the startup log; a log that
+    /// cannot be written stops nothing and comes back as one more problem.
+    /// On the main actor so that overlapping calls never mix up a log write.
+    @MainActor
     static func setLaunchItems(_ items: [LaunchItem], enabled: Bool) async -> [String] {
+        let log = LaunchActionLog.standard()
+        var logProblem: String?
+        func record(_ entry: LaunchActionLog.Entry) {
+            do {
+                try log.append(entry)
+            } catch {
+                logProblem = "İşlem kaydı yazılamadı: \(error.localizedDescription)"
+            }
+        }
+
         var problems: [String] = []
         var system: [LaunchItem] = []
         for item in items {
             if let refusal = LaunchControl.refusal(for: item) {
                 problems.append("\(item.displayName): Keel bunu değiştirmez (\(refusal)).")
+                LaunchActionLog.Entry.refused(item: item, enabled: enabled).map(record)
             } else if LaunchControl.needsAdministrator(item) {
                 system.append(item)
             } else if case .failed(let message) = await run(LaunchControl.script(enable: enabled, item: item, userID: getuid())) {
                 problems.append("\(item.displayName): \(message)")
+                record(.init(item: item, enabled: enabled, outcome: .failed, detail: message))
+            } else {
+                record(.init(item: item, enabled: enabled, outcome: .ok))
             }
         }
-        guard !system.isEmpty else { return problems }
+        guard !system.isEmpty else { return problems + (logProblem.map { [$0] } ?? []) }
 
         let script = system.map { "{ \(LaunchControl.script(enable: enabled, item: $0, userID: getuid())); }" }.joined(separator: " && ")
         let names = system.map { "\"\($0.displayName)\"" }.joined(separator: ", ")
         let verb = enabled ? "açmak" : "kapatmak"
         switch await runAsAdministrator(script, prompt: "Keel şu sistem servislerini \(verb) istiyor: \(names).") {
-        case .done: break
-        case .cancelled: problems.append("Yönetici izni verilmedi; sistem servisleri olduğu gibi kaldı.")
-        case .failed(let message): problems.append(message)
+        case .done:
+            system.forEach { record(.init(item: $0, enabled: enabled, outcome: .ok)) }
+        case .cancelled:
+            problems.append("Yönetici izni verilmedi; sistem servisleri olduğu gibi kaldı.")
+            system.forEach { record(.init(item: $0, enabled: enabled, outcome: .cancelled)) }
+        case .failed(let message):
+            problems.append(message)
+            system.forEach { record(.init(item: $0, enabled: enabled, outcome: .failed, detail: message)) }
         }
-        return problems
+        return problems + (logProblem.map { [$0] } ?? [])
     }
 
     // MARK: Login items

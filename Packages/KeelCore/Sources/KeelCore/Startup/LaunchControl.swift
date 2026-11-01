@@ -1,8 +1,7 @@
 import Foundation
 
-/// Turning launchd jobs off and on with `launchctl`, the way System Settings'
-/// "Allow in the Background" switches do. Disabling is remembered by launchd
-/// across restarts and undone by enabling; the job's plist is never touched.
+/// Turning launchd jobs off and on with `launchctl disable` and `enable`.
+/// The job's plist is never touched.
 public enum LaunchControl {
     /// Parses `launchctl print-disabled <domain>`: label -> disabled.
     /// Recent macOS writes "enabled"/"disabled", older versions true/false.

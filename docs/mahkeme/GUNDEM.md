@@ -187,3 +187,9 @@ Cevap:
   ve Çöp'te artık olmayan öğeyi deniyor; "aynı yola başka öğe geldi" yok.
   (Kaynak: `Packages/KeelCore/Sources/KeelCore/Actions/TrashRestorer.swift:53-68`,
   `Packages/KeelCore/Tests/KeelCoreTests/UndoTests.swift:35-50`)
+- Keel AI servis kartı `problems` satır sayısını başarısız servis sayısı gibi
+  kullanıyor. Servis değişip yalnızca işlem kaydı yazılamazsa kart hata gösterir,
+  "Geri al" çıkmaz ve geri almada `undone: false` döner; toplu sistem isteminde
+  tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
+  ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
+  `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)

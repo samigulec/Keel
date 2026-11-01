@@ -141,7 +141,12 @@ güvenlik politikası ve kategori kuralları Linux'ta (CI'da) da test edilebilir
       arka plan servisleri tek yerde; Performans yalnızca canlı ölçümler ve fanlar
 - [x] Keel AI eylem kartları: servis/giriş öğesi kapatma, uygulama
       kapatma, fan ayarı; kullanıcı onaylamadan hiçbir şey değişmez
-- [ ] Kullanıcı LaunchAgent'larını aç/kapat
+- Kullanıcı LaunchAgent'larını aç/kapat: Mac doğrulaması bekliyor (insan işi);
+  doğrulanınca `[x]` yapılır. Kod tarafı yukarıdaki başlangıç kontrolü, Optimizasyon
+  ve Keel AI eylem kartları maddeleriyle karşılandı. Servis aç/kapat `startup.log`'a,
+  silme ve geri alma `actions.log`'a yazılıyor. Yasak-liste koruması ve `.system`
+  root yolu §2.3/§2.8 ile uzlaştırılmadı, sahip kararına bırakıldı
+  ([karar](mahkeme/2026-10-30-kullanici-launchagent-ac-kapat/karar.md))
 
 ### Faz 3 — Yönetici yetkisi gerektirenler
 - `SMAppService` ile privileged helper + XPC
