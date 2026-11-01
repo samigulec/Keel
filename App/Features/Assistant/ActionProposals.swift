@@ -55,10 +55,10 @@ struct ActionProposal: Identifiable, Equatable {
     /// A short note under the button.
     var footnote: String {
         switch kind {
-        case .startup(let items, _):
-            items.contains(where: LaunchControl.needsAdministrator)
-                ? "Sistem servisleri için macOS yönetici şifresi ister. Geri alınabilir."
-                : "Mac yeniden başlasa da böyle kalır. Geri alınabilir."
+        case .startup(let items, let enable):
+            (enable ? "" : "Çalışan servis hemen durdurulur. ")
+                + (items.contains(where: LaunchControl.needsAdministrator) ? "Sistem servisleri için macOS yönetici şifresi ister. " : "")
+                + "Geri alınabilir."
         case .removeLoginItems: "Uygulamalar silinmez; yalnızca girişte açılmazlar. Geri alınabilir."
         case .quitApps: "Kaydedilmemiş işin varsa uygulama önce sorar."
         case .fans: "macOS yönetici şifresi ister."
