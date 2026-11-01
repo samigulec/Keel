@@ -228,7 +228,7 @@ private struct LaunchItemsCard: View {
                     .help(item.program ?? item.url.path)
                 }
             }
-            Text("Kapattığın servis Mac yeniden başlasa da kapalı kalır; anahtarı açınca geri gelir. Kilitli olanlar yönetici şifresi ister.")
+            Text("Kapattığın servis hemen durdurulur ve Keel onu açılışta başlamaması için işaretler; anahtarı açınca geri gelir. \"Tüm kullanıcılar\" servislerinde değişiklik yalnızca senin oturumunu etkiler. Kilitli olanlar yönetici şifresi ister.")
                 .font(.keel(11, .medium))
                 .foregroundStyle(Palette.slate)
                 .fixedSize(horizontal: false, vertical: true)

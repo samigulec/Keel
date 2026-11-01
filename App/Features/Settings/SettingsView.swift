@@ -77,16 +77,16 @@ struct SettingsView: View {
             }
 
             Section("Gizlilik ve kayıtlar") {
-                Text("Keel'in sildiği, atladığı ve geri aldığı her öğe bir kayıt dosyasına yazılır. Dosyalarının içeriği hiçbir yere gönderilmez.")
+                Text("Keel'in sildiği, atladığı ve geri aldığı her öğe ile açıp kapattığı arka plan servisleri kayıt dosyalarına yazılır. Dosyalarının içeriği hiçbir yere gönderilmez.")
                     .font(.keel(12, .medium))
                     .foregroundStyle(Palette.slate)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Kayıt dosyasını Finder'da göster") {
-                    let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Keel/actions.log")
-                    if FileManager.default.fileExists(atPath: log.path) {
-                        NSWorkspace.shared.activateFileViewerSelecting([log])
+                Button("Kayıt klasörünü Finder'da göster") {
+                    let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Keel", isDirectory: true)
+                    if FileManager.default.fileExists(atPath: logs.path) {
+                        NSWorkspace.shared.open(logs)
                     } else {
-                        NSWorkspace.shared.open(log.deletingLastPathComponent().deletingLastPathComponent())
+                        NSWorkspace.shared.open(logs.deletingLastPathComponent())
                     }
                 }
             }

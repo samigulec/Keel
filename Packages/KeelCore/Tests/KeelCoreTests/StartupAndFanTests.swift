@@ -59,6 +59,37 @@ struct StartupControlTests {
             == "/bin/launchctl enable 'gui/501/com.microsoft.update.agent' && { /bin/launchctl bootstrap 'gui/501' '/Library/LaunchAgents/com.microsoft.update.agent.plist' 2>/dev/null; true; }")
     }
 
+    @Test func scriptsForTheUsersOwnAgents() {
+        let agent = item("homebrew.mxcl.postgresql@16", scope: .user, path: "/Users/me/Library/LaunchAgents/homebrew.mxcl.postgresql@16.plist")
+        #expect(!LaunchControl.needsAdministrator(agent))
+        #expect(LaunchControl.script(enable: false, item: agent, userID: 501)
+            == "/bin/launchctl disable 'gui/501/homebrew.mxcl.postgresql@16' && { /bin/launchctl bootout 'gui/501/homebrew.mxcl.postgresql@16' 2>/dev/null; true; }")
+        #expect(LaunchControl.script(enable: true, item: agent, userID: 501)
+            == "/bin/launchctl enable 'gui/501/homebrew.mxcl.postgresql@16' && { /bin/launchctl bootstrap 'gui/501' '/Users/me/Library/LaunchAgents/homebrew.mxcl.postgresql@16.plist' 2>/dev/null; true; }")
+    }
+
+    /// launchd keeps one override per label, so a label present in both
+    /// folders shows as two rows that switch together.
+    @Test func sameLabelInTwoFoldersSharesOneOverride() throws {
+        let sandbox = try Sandbox()
+        let own = sandbox.home.appendingPathComponent("Library/LaunchAgents")
+        let shared = sandbox.home.appendingPathComponent("Shared/LaunchAgents")
+        let data = try PropertyListSerialization.data(fromPropertyList: ["Label": "com.example.twin", "RunAtLoad": true], format: .xml, options: 0)
+        for folder in [own, shared] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: folder.appendingPathComponent("com.example.twin.plist"))
+        }
+
+        for override in [true, false] {
+            let overrides = ["com.example.twin": override]
+            let rows = LaunchItemScanner.items(in: own, scope: .user, overrides: overrides)
+                + LaunchItemScanner.items(in: shared, scope: .allUsers, overrides: overrides)
+            #expect(rows.count == 2)
+            #expect(Set(rows.map(\.id)).count == 2)
+            #expect(rows.map(\.isDisabled) == [override, override])
+        }
+    }
+
     @Test func quoting() {
         #expect(ShellCommand.quote("it's") == "'it'\\''s'")
         #expect(ShellCommand.join(["/Applications/My App.app/Contents/MacOS/Keel", "--fan", "auto"])
