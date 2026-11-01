@@ -193,3 +193,45 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Eski indirmeler kuralı, klasör öğelerinin "yaşını" klasörün kendi
+  değişiklik tarihinden alıyor; içindeki dosyalar yakın zamanda değişmiş
+  olsa bile klasör 90 günden eski sayılabilir. `ChildrenSource` Downloads'ın
+  doğrudan çocuklarına `context.lastActivity(child)` uyguluyor;
+  `FileActivity.lastActivity` ise yalnızca öğenin kendi `mtime`, `addedToDirectory`
+  ve Spotlight `kMDItemLastUsedDate` değerlerinin en büyüğünü alıyor, içeriğe
+  inmiyor. Bir klasörün `mtime`'ı yalnızca içine girdi eklenince ya da
+  silinince değişir; alt dosya düzenlenince değişmez. Aylar önce indirilip
+  açılmış, içindeki dosyalar bugün düzenlenen bir proje klasörü ya da
+  açılmış arşiv "90 gündür dokunulmamış" diye listelenir. Spotlight tarihi
+  klasörlerde genelde boştur (Mac'te doğrulanmadı). Kural varsayılan
+  seçili değil ve her şey Çöp'e gidiyor, yani zarar sınırlı; ama liste
+  "dokunulmamış" diye yanlış güvence veriyor (§2.2 "önce göster": gösterilen
+  bilgi yanlış). Testler yalnızca düz dosyalarla `daysOld` kullanıyor, içi
+  yeni dosyalı eski klasör senaryosu yok. Çözüm yönü: klasörlerde alt
+  ağacın en yeni değişiklik tarihini kullanmak ya da klasörleri atlamak.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:89-93`,
+  `Packages/KeelCore/Sources/KeelCore/Scanning/FileActivity.swift:12-36`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:145`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupScannerTests.swift:89-96`)
+- "Çalışan uygulamanın önbelleğine dokunulmaz" (§2.6) kuralı yalnızca
+  `Candidate.owner` doluysa işliyor; sahibi bilinmeyen öğeler hiç
+  denetlenmiyor. Genel önbellek kuralı `.bundleIDFromName` kullanıyor ve adı
+  nokta içermeyen klasörlerde (`Spotify`, `Slack`, `JetBrains` gibi) `owner`
+  nil oluyor. Günlük kuralındaki `AgedFilesSource` her zaman `owner: nil`
+  veriyor, geliştirici önbelleklerinin `FixedPathsSource` girdileri de
+  (`Homebrew`, `pip`, `yarn`...) öyle. Tarayıcı `scan` içindeki çalışan
+  uygulama süzgeci `if let owner = candidate.owner` ile başladığı için bu
+  öğeler çalışan uygulamanın dosyası olsa da atlanmıyor; örneğin açık
+  bir uygulamanın 7 günden eski ama hâlâ kullanımda günlük dosyası ya da
+  `brew` çalışırken `Homebrew` önbelleği listelenip (geliştirici kuralı
+  varsayılan kapalı, günlük kuralı varsayılan AÇIK) onayla Çöp'e
+  taşınabilir. Hangi gerçek klasörlerin hangi uygulamaya ait olduğu Mac'te
+  doğrulanmadı; ama kod yolu net. Mevcut testler yalnızca `com.spotify.client`
+  gibi nokta içeren adları ve bundle ID önekini deniyor; `owner == nil` ile
+  çalışan uygulama senaryosu yok. Çözüm yönü: bilinen eşlemeler
+  (`Spotify` -> `com.spotify.client`) ya da sahibi bilinmeyen öğeler için
+  ayrı, görünür bir uyarı. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:101,133`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupScanner.swift:66`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:97,123-125`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupScannerTests.swift:44-64`)
