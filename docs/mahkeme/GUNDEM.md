@@ -86,3 +86,9 @@ Cevap:
   Linux'ta test edebilmek için `deviceID` enjekte edilebilir yapılabilir.
   (Kaynak: `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:94`;
   `Tests/` altında `differentVolume` geçmiyor)
+- Keel AI servis kartı `problems` satır sayısını başarısız servis sayısı gibi
+  kullanıyor. Servis değişip yalnızca işlem kaydı yazılamazsa kart hata gösterir,
+  "Geri al" çıkmaz ve geri almada `undone: false` döner; toplu sistem isteminde
+  tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
+  ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
+  `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
