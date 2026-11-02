@@ -92,3 +92,55 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Fan yardımcısı kuruluyken "Keel kapanınca fanlar otomatiğe döner" sözü
+  yalnızca aynı oturumda ayarlanan hızlar için doğru. `handBackFansOnQuit`
+  bellekteki `fanSetting`'e bakıyor; bu alan her açılışta nil başlıyor ve
+  yalnızca başarılı `setFans` ile doluyor. Keel fanlar elle ayarlıyken çökerse,
+  zorla kapatılırsa ya da yeniden açılıp kapatılırsa hiçbir istek yazılmıyor,
+  fanlar yeniden başlatmaya kadar sabit kalıyor. Oysa Performans ekranı (elle
+  durumu SMC'den okuyor) "Keel kapanınca macOS'e döner", Ayarlar da "Kurulu:
+  ... Keel kapanınca otomatiğe döner" diyor: kullanıcıya yanlış güvence. PLAN
+  Faz 2 fan yardımcısı maddesinin sözü; §2 ihlali değil. `willTerminate`
+  bildiriminin çökme/SIGKILL'de gelmediği genel bilgi, Mac'te doğrulanmadı.
+  Karar mantığı App'te olduğu için test yok. Çözüm yönü: Keel'in son
+  uyguladığı fan ayarını UserDefaults'a yazmak, kapanışta ve açılışta
+  "Keel ayarladı ve SMC hâlâ elle" ise otomatiğe dönmek (başka araçların
+  ayarına dokunmadan); kararı KeelCore'da saf bir fonksiyona alıp test etmek.
+  (Kaynak: `App/Features/Performance/PerformanceModel.swift:160,189-192,200`,
+  `App/Features/Performance/PerformanceView.swift:699`,
+  `App/Features/Settings/SettingsView.swift:55`)
+- Temizlik sonucu "X GB temizlendi" diyor ama öğeler yalnızca Çöp Kutusu'na
+  taşındı; Çöp boşaltılana kadar diskte yer açılmaz. `CleanupReport.freedBytes`
+  `removed` toplamı (Çöp'ten kalıcı silinenler dahil). Kullanıcı bandı görüp
+  disk doluluğuna bakınca değişiklik görmez; Akıllı Tarama'daki "Disk
+  neredeyse dolu" bulgusu da aynen kalır. Büyük Dosyalar ve Uygulamalar
+  ekranları aynı durumu doğru söylüyor ("Çöp Kutusu'na taşındı"), yani ekranlar
+  arasında tutarsızlık da var. Karışık raporda (Çöp + önbellek) "Geri al"
+  düğmesi görünüyor ama kalıcı silinen kısmın geri alınamayacağı yazmıyor
+  (§2.1 güveninin dayanağı Çöp'e taşıma; §2.2 gösterilen bilgi doğru olmalı).
+  Metin App katmanında, test yok. Çözüm yönü: rapora Çöp'e taşınan ve kalıcı
+  silinen baytları ayrı alanlarla koymak; metin "X GB Çöp Kutusu'na taşındı;
+  Çöp boşaltılınca yer açılır" olsun, kalıcı silinen varsa ayrıca belirtilsin.
+  (Kaynak: `App/Features/Cleanup/CleanupView.swift:410,428-433`,
+  `App/Features/Assistant/AssistantView.swift:404`,
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:15,89`,
+  `App/Features/LargeFiles/LargeFilesView.swift:334`)
+- Akıllı Tarama sağlık puanı PLAN'daki sözle uyuşmuyor ve kendi içinde
+  tutarsız. PLAN §3: formül "disk doluluğu + temizlenebilir alan + bellek
+  baskısı" ve arayüzde "Bu puan nasıl hesaplanır?" ile gösterilecek. Kodda
+  sekiz girdi var (önbellek, disk, eski dosyalar, kullanılmayan uygulamalar,
+  bellek, ısı, pil, başlangıç servisleri) ve arayüzde formülü ya da kesintileri
+  gösteren hiçbir yer yok ("nasıl hesaplan" aranınca sonuç yok; halka yalnızca
+  "sağlık" yazıyor). Ayrıca eşikler çelişiyor: halka 85+ yeşil
+  (`ScoreRing.color`), başlık ise 90 altında "Mac'in fena değil; N konu
+  ilgilenmeni bekliyor" diyor; 85-89 arası yeşil halka + "fena değil".
+  Okunamayan girdi (disk/bellek nil, servis listesi yüklenmedi) hiç kesinti
+  yaratmıyor, yani veri yokken puan 100'e yakın ve "çok iyi durumda" çıkıyor.
+  Puan mantığı (`CareReport.evaluate`) saf bir fonksiyon ama App'te; CLAUDE.md
+  "mantık KeelCore'da" kuralına aykırı ve test yok. Çözüm yönü: fonksiyonu
+  KeelCore'a taşıyıp kesinti listesini (neden, puan) döndürmek, arayüzde
+  göstermek, eşikleri tek yerde tanımlamak, eksik girdiyi "ölçülemedi" diye
+  işaretlemek ve eşik/kesinti testleri yazmak. (Kaynak:
+  `App/Features/SmartScan/SmartCare.swift:43-173`,
+  `App/Features/SmartScan/SmartScanView.swift:93-103,207-251`,
+  `docs/PLAN.md:58`)
