@@ -92,3 +92,85 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Üç ekranda "Geri al" düğmesi, geri yükleme sürerken yeniden basılabiliyor ve
+  çifte tıklama yanlış "geri yüklenemedi" gösterebiliyor. `undoLastCleanup`,
+  `LargeFilesModel.undoLastRemoval` ve `ApplicationsModel.undoLastRemoval`
+  yalnızca `phase == .ready` arıyor, ama `await Undo.restore` boyunca `phase`
+  değişmiyor ve `lastReport` temizlenmiyor. Banner'daki düğme de devre dışı
+  kalmıyor (`ReportBanner`'da `disabled` yok). Senaryo: kullanıcı büyük bir
+  uygulamayı ya da dosyayı geri alırken düğmeye iki kez basar. İki `Task.detached`
+  aynı `TrashedItem` listesini işler. `TrashRestorer.restore` önce
+  `fileExists(inTrash)` ile bakıp sonra `moveItem` çağırdığı için biri kazanır,
+  öbürü "Çöp Kutusu'nda artık yok" ya da taşıma hatasıyla düşer. Sonuç:
+  `actions.log`'a gerçekte olmayan `failed` "undo:" satırları yazılır ve
+  `lastRestore`'u son biten çağrı belirler. Bitiş sırası belirsiz olduğu için
+  banner, geri yükleme başarılı olduğu halde "geri yüklenemeyen öğe" diyebilir
+  (§2.7 kayıt doğruluğu, §2.1 güvenin dayanağı geri alma). Ek yarış:
+  `CleanupModel.startScan` başka bir tarama sürüyorsa 91. satırda erken dönüyor
+  ve `lastReport`'u (97) temizlemiyor. Böyle olunca eski banner ve "Geri al"
+  yerinde kalır, geri konan öğeler de eski taramanın listesinde görünmez. Test
+  durumu: `UndoTests` tek çağrıyı, çakışmayı ve Çöp'te olmayan öğeyi deniyor;
+  yeniden girişli ya da iki kez geri alma yok, model katmanı App'te olduğu için
+  testsiz. Çözüm yönü: her üç modelde geri alma sırasında bir `isRestoring`
+  bayrağı (düğme devre dışı, `guard`), `lastReport`'u geri almanın başında
+  temizlemek. `TrashRestorer`'a "zaten orijinal yerinde" durumunu hata değil
+  "zaten geri konmuş" saymak ve bunun için KeelCore testi yazmak. Mac'te
+  doğrulanmadı; mantık platformdan bağımsız, kod yolu okunarak doğrulandı.
+  (Kaynak: `App/Features/Cleanup/CleanupModel.swift:91,97,160-165`,
+  `App/Features/LargeFiles/LargeFilesModel.swift:198-203`,
+  `App/Features/Applications/ApplicationsModel.swift:261-267`,
+  `App/Features/Cleanup/CleanupView.swift:418-424`,
+  `App/Features/Applications/ApplicationsView.swift:26`,
+  `App/Features/LargeFiles/LargeFilesView.swift:25`,
+  `Packages/KeelCore/Sources/KeelCore/Actions/TrashRestorer.swift:53-68`,
+  `Packages/KeelCore/Tests/KeelCoreTests/UndoTests.swift`)
+- Büyük Dosyalar, bulut senkronizasyonlu klasörleri ayırt etmiyor; "Çöp'e taşı"
+  orada yalnızca yerel bir taşıma olmayabilir. `LargeFileScanner.scan` ev
+  klasörünün üst düzey klasörlerini (`Library`, `Applications`, `.Trash`
+  hariç) tarıyor. Masaüstü, Belgeler ve kullanıcının `~/Dropbox`, `~/OneDrive`
+  gibi klasörleri listeye girebiliyor. Boş durum metni "iCloud ... listelenmez"
+  diyor (`LargeFilesView.swift:104`). Kod ise yalnızca `Library/Mobile Documents`
+  yolunu koruyor (`SafetyPolicy.swift:188`), yani sözün tuttuğu yer
+  `~/Library/Mobile Documents`. "Masaüstü ve Belgeler iCloud'da" açıksa ya da
+  klasör Dropbox/OneDrive ile eşleşiyorsa, dosyayı Çöp'e taşımak silmeyi
+  diğer cihazlara yayabilir ve Geri al yalnızca yerel Çöp'ü kapsar. Kodda
+  "senkron/sync/bulut" için hiçbir denetim, uyarı ya da test yok; `grep` yalnızca
+  `size()` içindeki "online-only dosyalar boyuta girmez" yorumunu buluyor.
+  Dokunduğu ilke: §2.4 (iCloud Drive korunur), §2.2 (onaydan önce doğru bilgi).
+  Çözüm yönü: önce bilinçli karar. Senkron kökleri tespit edip (ör.
+  `URLResourceKey.isUbiquitousItemKey`, bilinen sağlayıcı klasör adları)
+  listede rozet ve onay metninde uyarı göstermek, ya da bu dosyaları bulucudan
+  çıkarmak. Boş durum metni de gerçeği söylemeli. Mac'te doğrulanmadı: macOS'un
+  Masaüstü/Belgeler'i iCloud açıkken hangi yolda gösterdiği, `isUbiquitousItem`
+  değerinin bu dosyalarda ne döndürdüğü ve Çöp'e taşımanın iCloud'a nasıl
+  yansıdığı. Test yok: `LargeFilesTests` yalnızca sahte ev klasöründe düz
+  dosya, paket ve `~/Library` senaryolarını deniyor.
+  (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/LargeFiles/LargeFiles.swift:74,140-146,215`,
+  `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:188`,
+  `App/Features/LargeFiles/LargeFilesView.swift:104`,
+  `Packages/KeelCore/Tests/KeelCoreTests/LargeFilesTests.swift:12-27`)
+- Keel AI'da yeniden açılan eski sohbetin geçmişi, ilk mesaj başarısız ya da
+  iptal olursa modele hiç ulaşmadan kayboluyor. `open(_:)` sohbeti ekrana
+  yükleyip `restoredTranscript` doldurur (371). `send` bu alanı mesaja ekler ve
+  görev başlamadan `nil` yapar (179-181). `session.send` sonradan hata fırlatırsa
+  (CLI bulunamadı, giriş gerekiyor, kullanım sınırı) ya da kullanıcı Durdur'a
+  basarsa, `catch` dalı (190-199) transkripti geri koymuyor. Başarısız ilk
+  çalıştırmada `AccountSession` ne `conversationID`'yi ne de oturumu saklıyor
+  (`runClaude`/`runCodex` yalnızca başarıda atıyor). Senaryo: kullanıcı üç
+  günlük bir sohbeti açar, mesaj yazar, "yeniden giriş gerekiyor" hatası alır,
+  giriş yapıp aynı mesajı tekrar gönderir. Ekranda eski sohbet duruyor, ama
+  model onu görmemiştir ve "yukarıdaki dosyayı silelim mi?" gibi bir devam
+  sorusuna bağlamsız cevap verir. Kullanıcıya hiçbir şey söylenmiyor. Aynı
+  yerde, iptalde çıkan not "Bu mesaj sohbet geçmişine eklenmedi" diyor
+  (196), oysa hemen ardından `persist()` kullanıcı mesajını ve notu diske yazıyor
+  (`.user` ve `.notice` öğeleri kaydediliyor), yani söz kayıt davranışıyla
+  çelişiyor. Dokunduğu ilke: §2 değil; Keel AI kullanıcıya doğru durum
+  göstermeli (§2.2 ruhu), silme yok, zarar yok. Test durumu: `AssistantModel`
+  App katmanında, test yok. Çözüm yönü: transkripti yalnızca `session.send`
+  başarılı olunca tüketmek (hata/iptalde geri koymak), iptal notunu gerçeğe
+  uydurmak. Karar mantığı küçük bir saf yapıya (ör. "bekleyen bağlam")
+  alınıp KeelCore'da test edilebilir. Mac'te doğrulanmadı; kod yolu okunarak
+  doğrulandı.
+  (Kaynak: `App/Features/Assistant/AssistantModel.swift:80,176-199,333-343,371`,
+  `App/Features/Assistant/AccountSession.swift:127-134,149-151,219-221`)
