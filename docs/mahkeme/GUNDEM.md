@@ -92,3 +92,100 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- İptal edilen süreç "başarılı" dönüyor: `ProcessLines.run` görevi iptal
+  edilince boş/kısmi çıktıyla `(status: 0, ...)` veriyor. `onTermination`
+  `.cancelled` iken `box.cancel()` süreci sonlandırıyor; `AsyncThrowingStream`
+  iptalde `nil` döndüğü için `for try await` döngüsü hatasız biter ve
+  `status != 0, !box.wasCancelled` koşulu `finish()`'i hatasız çağırır; `run`
+  de `return (0, lines.joined(separator: "\n"))` yapar. Çağıranlar bunu gerçek
+  sonuç sayıyor: `SystemControl.overrides` (`result.status == 0` ->
+  `parseOverrides("")` -> `[:]`), `appleScript` (`.done("")`) ve
+  `CLITool.version/account`. Senaryo 1: Optimizasyon'a ilk girişte macOS
+  "Keel, System Events'i denetlemek istiyor" izni sorar; `osascript` yanıt
+  beklerken kullanıcı başka sekmeye geçer. `.task` iptal olur, `osascript`
+  sonlandırılır, `loginItems()` `.success([])` döner ve
+  `refreshLoginItems` `loginItemsLoaded = true`, `loginItemsError = nil`
+  yapar: ekran "girişte açılan uygulama yok" der, Keel AI de
+  `loginItemsWhenReady()` ile boş liste görür. Aynı iptalle
+  `refreshLaunchItems` boş `overrides` ile taranıp `launchItemsLoaded = true`
+  yapar ve kapatılmış servisler "açık" görünür. Senaryo 2: Keel AI
+  sağlayıcı paneli `.task { refreshAll() }` ile `locate()` çalışırken
+  kapatılırsa `whence -ap` ve `--version` çağrıları boş döner,
+  `cachedExecutable = fallback` ilk bulunan (eski olabilir) kurulumu oturum
+  boyunca kalıcı tutar ve hesap "girişli değil" görünebilir. Ayrıca
+  `Box.wasCancelled` 109. satırda kilitsiz okunuyor (`cancel()` kilitle
+  yazıyor), `@unchecked Sendable` altında yarış. PLAN §2.2 ruhu (ekranda
+  gösterilen durum gerçeği yansıtmalı). Önceki "print-disabled başarısız
+  olursa" maddesinden farkı: orada çıkış kodu hatalı; burada iptal kodu
+  0'a çeviriyor. Test: `ClaudeCodeTests` yalnızca normal, başarısız ve
+  birleşik-stderr çalıştırmayı deniyor; iptal testi yok, `ProcessLines`
+  KeelCore'da olduğu için Linux'ta yazılabilir (`sleep 5` çalıştır, görevi
+  iptal et, sonucun hata/iptal olduğunu bekle). Çözüm yönü: `run` döngüden
+  sonra `try Task.checkCancellation()` atsın (ya da özel iptal durumu
+  döndürsün); `refreshLaunchItems`, `refreshLoginItems` ve `locate`
+  iptalde durumu yazmasın / önbelleğe atmasın; `wasCancelled` kilitle
+  okunsun. Mac'te çalıştırılmadı; bu ortamda `swift` yok, kod yolu
+  okunarak doğrulandı (iptalde `nil` dönen `AsyncThrowingStream` davranışı
+  Swift belgesinden biliniyor, derleyicide denenmedi). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/AI/ProcessLines.swift:17-49,71-73,109-113,125-142`,
+  `App/Features/Performance/SystemControl.swift:36-40,62-66`,
+  `App/Features/Performance/PerformanceModel.swift:81-90,120-128`,
+  `App/Features/Optimization/OptimizationView.swift:58-61`,
+  `App/Features/Assistant/CLITool.swift:86-100,108-111,127,168-181`,
+  `App/Features/Assistant/ProviderPanel.swift:57`,
+  `Packages/KeelCore/Tests/KeelCoreTests/ClaudeCodeTests.swift:86-108`)
+- Canlı sistem okumaları pencere kapalıyken de sürüyor (enerji/pil).
+  `SystemStatus.init` iki saniyelik döngüyü hiç durdurmadan başlatıyor:
+  her turda `LiveReading.take` bellek, yük, CPU, çekirdek başına CPU, GPU,
+  disk G/Ç (IORegistry) ve ağ (`sysctl` yönlendirme tablosu) okuyor; her
+  2. turda (4 sn) `SensorReader.snapshot` SMC ve HID sensörlerini açıyor;
+  30 sn'de bir disk ve pil okunuyor. `scenePhase`, pencere görünürlüğü ya da
+  popover durumu hiçbir yerde denetlenmiyor (App/ altında `scenePhase`,
+  `isVisible`, `occlusion` araması sonuç vermedi). Menü çubuğu simgesi sabit
+  (`MenuBarExtra("Keel", systemImage: "gauge.with.dots.needle.33percent")`),
+  yani değerler yalnızca ana pencere görünürken ya da popover açıkken
+  okunuyor. Senaryo: kullanıcı Keel'i menü çubuğunda açık bırakıp pencereyi
+  kapatıyor (ya da menü çubuğu seçeneğini kapatıp pencereyi küçültüyor);
+  dizüstünde saatlerce 2 sn aralıkla IOKit/SMC okuması sürüyor, oysa bunları
+  kimse görmüyor. Bir bakım uygulaması için pil/enerji tutarsızlığı. PLAN
+  §2 ilkesine değmiyor; Faz 2 "Menü çubuğunda canlı grafikler" maddesi
+  yapılırsa okuma ihtiyacı değişir, kararı o maddeyle birlikte almak gerekir.
+  Gerçek maliyet ölçülmedi (Mac'te Activity Monitor "Energy Impact" /
+  Instruments gerekir, doğrulanmadı). Test: `SystemStatus` App katmanında,
+  test yok. Çözüm yönü: görünürlüğe bağlı `active` bayrağı (ana pencere
+  `NSWindow.didChangeOcclusionState`, popover açık mı); görünmezken döngü
+  uyusun ya da çok seyrek (ör. 30 sn) çalışsın; Keel AI araçları `status`
+  verisini isterken `refreshNow`-benzeri tek seferlik okuma yapsın. Saf
+  kısım (hangi turda hangi iş) küçük bir yapıya alınıp KeelCore'da test
+  edilebilir. (Kaynak: `App/SystemStatus.swift:44-46,65-80,201-224`,
+  `App/KeelApp.swift:36-72`,
+  `Packages/KeelCore/Sources/KeelCore/Hardware/Sensors.swift:87-109`)
+- Tam Disk Erişimi uyarısı yalnızca kullanıcı düğmeye basınca yenileniyor ve
+  yeniden başlatma gerektiğini söylemiyor. `CleanupView`'da
+  `@State hasFullDiskAccess = FullDiskAccess.isGranted` bir kez
+  hesaplanıyor; yeniden denetim yalnızca "Tekrar kontrol et" düğmesinde,
+  uygulama öne gelince (`didBecomeActive`) denetlenmiyor. Banner metni
+  yalnızca "Keel'i aç" diyor. Sistem Ayarları'nda Tam Disk Erişimi verilen
+  çalışan bir uygulamanın erişimi yeniden başlatmaya kadar değişmeyebilir
+  (macOS "Quit & Reopen" sorar); bu doğrulanmadı, bkz. genel anlatım
+  [iBoysoft](https://iboysoft.com/tips/full-disk-access-mac-not-working.html)
+  (yalnızca arama sonucu başlığı; sayfa okunmadı). Senaryo: kullanıcı
+  izni verip Keel'e döner, "Tekrar kontrol et"e basar, banner kalır ve Çöp
+  Kutusu kategorisi hâlâ "Okunamadı: Tam Disk Erişimi gerekiyor" der;
+  nedenini anlayamaz. İzin yoklaması ayrıca `~/Library/Safari` yoksa
+  `true` dönüyor ("nothing to tell"), yani Safari klasörü olmayan bir
+  kullanıcıda Çöp Kutusu okunamasa bile banner hiç çıkmaz (Çöp için
+  kategori satırındaki ayrı uyarı kalır). Akıllı Tarama ve Keel AI
+  ekranlarında FDA durumu hiç gösterilmiyor (`SmartScan/*.swift` içinde
+  "unreadable"/"FullDisk" yok; `optInBytes` de `CareReport.evaluate`
+  içinde kullanılmıyor). PLAN Faz 1 "Full Disk Access yoksa onboarding
+  ekranı ve yönlendirme" maddesinin zayıf karşılığı; §2 ihlali değil. Düşük
+  öncelik. Test: probe App katmanında (`FullDiskAccess`), test yok.
+  Çözüm yönü: `NSApplication.didBecomeActiveNotification` ile otomatik
+  yeniden kontrol; probe olarak `~/.Trash` (TCC korumalı) kullanmak; metne
+  "Verdikten sonra Keel'i kapatıp yeniden aç" eklemek (yeniden başlatma
+  gerekliliği Mac'te doğrulanınca). (Kaynak:
+  `App/System/FullDiskAccess.swift:8-14`,
+  `App/Features/Cleanup/CleanupView.swift:8,25-27,371-395`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupScanner.swift:61,104-107`,
+  `App/Features/SmartScan/SmartCare.swift:31,255-256`)
