@@ -92,3 +92,88 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Akıllı Tarama "Temizle" sonucu kullanıcıya göstermiyor ve vaat ettiği
+  "Temizlik ekranından geri alabilirsin" güvencesi bir sonraki taramada
+  kayboluyor. `SmartCareModel.cleanRecommended` raporu `_ =` ile atıyor;
+  Akıllı Tarama ekranında `lastReport` / `ReportBanner` yok. Atlanan
+  (uygulama açık), başarısız ya da hiç çalışmayan temizlik (`cleanAndWait`
+  `phase != .ready` iken sessizce `nil` dönüyor) görünmüyor, yalnızca bulgu
+  listesi yenileniyor. "Geri al" ise `CleanupModel.lastReport` içinde; her
+  `startScan` bunu ve `lastRestore`'u siliyor. Keel AI'nın
+  `scan_cleanable_space` aracı her çağrıda `scanAndWait()` çalıştırıyor
+  (AccountSession'daki 600 sn önbelleği yalnızca bağlam toplamada var), yani
+  temizlik sonrası sohbette bir soru ya da "Yeniden tara" Geri al düğmesini
+  yok ediyor. Ayrıca `selectRecommended()` kullanıcının Temizlik'teki elle
+  seçimini ezer. Senaryo: kullanıcı Akıllı Tarama'dan 3 GB temizler, Keel
+  AI'ya "disk neden dolu?" der, Temizlik'e gidince Geri al yok; öğeler Çöp'te
+  duruyor ama Keel'den dönüş yolu yok (§2.1 geri alınabilirlik güveni, §2.2
+  gösterilen bilgi doğru olmalı). Önceki "Geri al çifte tıklama" ve "X GB
+  temizlendi" önerilerinden farkı: orada Temizlik ekranının kendisi, burada
+  Akıllı Tarama yolu ve taramanın raporu silmesi. Test yok: App katmanı.
+  Çözüm yönü: `startScan` `lastReport`'u yalnızca yeni sonuç gelince
+  temizlesin (ya da geri alınabilir raporu ayrı tutsun); Akıllı Tarama
+  temizlik sonrası özet satırı + atlanan/başarısız sayısı + Geri al
+  göstersin; `nil` dönüşü kullanıcıya "şu an taranıyor" desin. Doğrulama:
+  `swift` bu ortamda yok; yalnızca kod yolu okunarak doğrulandı, Mac'te
+  denenmedi. (Kaynak: `App/Features/SmartScan/SmartCare.swift:272-276`,
+  `App/Features/SmartScan/SmartScanView.swift:37-46,74`,
+  `App/Features/Cleanup/CleanupModel.swift:45-47,90-98,137-138`,
+  `App/Features/Assistant/KeelTools.swift:71-78`,
+  `App/Features/Assistant/AccountSession.swift:293-298`,
+  `App/Features/Cleanup/CleanupView.swift:28-32`)
+- KeelCore, uygulamanın hiç kullanmadığı, API anahtarlı bir ağ yolu
+  taşıyor. PLAN "Keel AI ... API anahtarı yok" ve "Bağımlılık sıfır, sade
+  ve denetlenebilir" diyor. Oysa `AnthropicBackend` (x-api-key),
+  `OpenAICompatibleBackend` (keyfi `baseURL` + Bearer anahtar),
+  `ModelCatalog` (anahtarla model listesi), `URLSessionTransport`,
+  `URLSessionHTTPClient`, `SSEParser` ve `AssistantEngine` sınıfı
+  (`ChatSession` uyumu için) paketin public API'sinde duruyor. `App/`
+  altında `AnthropicBackend`, `OpenAICompatibleBackend`, `ModelCatalog`,
+  `URLSessionTransport`, `AssistantEngine(` araması sonuç vermedi; yalnızca
+  `AITool`, `AssistantEvent`, `ChatSession`, `ModelNames` gibi tipler
+  kullanılıyor. Kalıntı, "kendi sağlayıcını getir" dönemindeki ilk Keel AI
+  çekirdeğinden (commit 02c21eb). Zarar: bugün tetiklenmiyor; ama ileride bir
+  değişiklik motoru bağlarsa araç sonuçları (dosya adları dahil) keyfi bir
+  uç noktaya anahtarla gidebilir ve §Keel AI "özet veri, hesap girişi
+  sağlayıcının akışında" sözünü sessizce deler; denetim yüzeyi de ~530
+  satır (+ AssistantTests'in 320 satırı) fazla. Dokunduğu ilke: PLAN §1
+  bağımlılık/sadelik, Keel AI veri akışı (mahkeme zorunlu alanı). Test:
+  yalnızca AssistantTests bunu çalıştırıyor, yani kullanılmayan kodu
+  korumak için test yazılmış. Çözüm yönü: ya kaldır (AITool, AssistantEvent,
+  ChatSession, JSONValue, ModelNames, Usage'ın kullanılan kısmı kalsın) ya
+  da PLAN'a "BYO anahtar yolu bilerek tutuluyor" diye yaz. Silinecek parça
+  için mahkeme kararı gerekir. Doğrulama: kullanım yalnızca grep ile
+  doğrulandı (isim araması); `swift build` bu ortamda yok, silmenin
+  derlemeyi bozmayacağı doğrulanmadı. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/AI/AnthropicBackend.swift:8,70`,
+  `Packages/KeelCore/Sources/KeelCore/AI/OpenAICompatibleBackend.swift:9,27,62`,
+  `Packages/KeelCore/Sources/KeelCore/AI/ModelCatalog.swift:27-38,66-70`,
+  `Packages/KeelCore/Sources/KeelCore/AI/URLSessionTransport.swift:9`,
+  `Packages/KeelCore/Sources/KeelCore/AI/AssistantEngine.swift:32`,
+  `docs/PLAN.md:20,157`)
+- İşlem günlükleri eşzamanlı yazımda satır kaybedebilir. `ActionLog.append`
+  ve kopyası `LaunchActionLog.append` her çağrıda yeni bir `FileHandle`
+  açıp `seekToEnd()` ve ardından `write` yapıyor; `O_APPEND` yok, kilit ya
+  da seri kuyruk yok. İki yazıcı aynı anda EOF'a konumlanırsa ikincisi
+  birincinin satırının üzerine yazar. Temizlik, Büyük Dosyalar ve Uygulama
+  kaldırma ayrı `Task.detached` içinde çalışıyor ve yalnızca kendi modelinin
+  `phase`'ini denetliyor, yani kullanıcı bir temizlik sürerken başka
+  ekrandan kaldırma başlatabilir ya da Geri al (`TrashRestorer` aynı
+  dosyaya yazar) çalışabilir. Eski günlük kuralı binlerce dosyayı tek tek
+  kaydeder (`AgedFilesSource`), yani çakışma penceresi uzun. Senaryo:
+  2.000 eski günlük dosyası temizlenirken 4 GB'lık bir dosya Çöp'e atılır;
+  `actions.log`'ta bazı satırlar yok, §2.7 "Her işlem kaydedilir" sessizce
+  bozulur. Önceki "günlük `try?` ile yazılıyor" önerisinden farkı: orada
+  yazma hatası, burada hatasız ama kayıp yazım. Test: `UndoTests`,
+  `LaunchActionLogTests` yalnızca sıralı eklemeyi (50 ardışık satır) deniyor;
+  eşzamanlı test yok. Çözüm yönü: tek ortak `AppendOnlyJSONLog` yazıcısı
+  (iki kopya birleşir), `open(path, O_WRONLY | O_APPEND | O_CREAT, 0o600)`
+  ve satırı tek `write(2)` ile yazmak (POSIX, tek yazma için atomik ekleme
+  sağlar); test: `DispatchQueue.concurrentPerform` ile 8x200 ekleme sonrası
+  1.600 satır beklemek, Linux'ta çalışır. Doğrulama: yarış kod okunarak
+  çıkarıldı; `swift` yok, çakışma gerçekte üretilmedi, olasılığı ölçülmedi.
+  Günlüğün dosya izni de (varsayılan umask) bu değişiklikte belirlenebilir.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Actions/ActionLog.swift:42-60`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchActionLog.swift:63-81`,
+  `Packages/KeelCore/Sources/KeelCore/Actions/TrashRestorer.swift:47,69`,
+  `Packages/KeelCore/Tests/KeelCoreTests/LaunchActionLogTests.swift:38-45`)
