@@ -92,3 +92,32 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Keel'in kendi fan yardımcısı (`com.samigulec.Keel.fan`, `/Library/LaunchDaemons`)
+  Optimizasyon listesinde ve Keel AI servis kartında sıradan bir sistem servisi
+  olarak çıkıyor; `LaunchControl.refusal` yalnızca `com.apple.` önekini ve tuhaf
+  karakterleri reddediyor. Kapatılırsa `helperInstalled` yine "kurulu" der, fan
+  isteği 30 sn bekleyip "yanıt vermedi" olur ve `handBackFansOnQuit` isteğini kimse
+  okumadığı için fanlar sabit hızda kalabilir. `installScript` `bootstrap`tan önce
+  `launchctl enable` çalıştırmadığından "yeniden kur" önerisi çıkmaza girebilir
+  (launchctl davranışı Mac'te doğrulanmadı). §2.2 ve fan güvenliği; Keel'in kendi
+  etiketi için `refusal` testi yok. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchControl.swift:36-37`,
+  `Packages/KeelCore/Sources/KeelCore/Hardware/FanHelper.swift:11,101-102`,
+  `App/Features/Performance/SystemControl.swift:150-153,174-190`,
+  `App/Features/Performance/PerformanceModel.swift:189-191`,
+  `Packages/KeelCore/Tests/KeelCoreTests/StartupAndFanTests.swift:44-47`)
+- Geliştirici önbellekleri listesinde `"Yarn"` ve `"yarn"` ayrı girdiler; macOS'in
+  varsayılan APFS birimi harfe duyarsız olduğu için aynı klasör iki aday olur,
+  tarayıcının `seen` tekrar elemesi harfe duyarlı olduğundan ikisi de geçer. Liste
+  ve Akıllı Tarama toplamı şişer; ikisi seçilirse ikincisi `.doesNotExist` ile
+  sahte "atlandı" kaydı üretir (§2.2, §2.7). Test yok; Mac'te doğrulanmadı.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:57,123-125`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:157-160`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupScanner.swift:64,70-73`)
+- Büyük Dosyalar taraması boyut süzgecinden önce ev klasöründeki her dosyanın
+  URL'sini belleğe topluyor (`candidates.append(url)` eşik denetimsiz), boyut ve
+  normal-dosya denetimi ikinci döngüde. Milyonlarca dosyalı ev klasöründe gereksiz
+  bellek ve süre; güvenliğe değmiyor, ölçülmedi. Ölçek testi yok. Çözüm yönü:
+  süzgeci numaralandırma döngüsüne almak. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/LargeFiles/LargeFiles.swift:163-199`,
+  `Packages/KeelCore/Tests/KeelCoreTests/LargeFilesTests.swift:12-27`)
