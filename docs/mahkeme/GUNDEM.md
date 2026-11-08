@@ -92,3 +92,46 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Keel AI "set_fans" aracı model çıktısındaki sayıyı `Int($0.rounded())`
+  ile çeviriyor; çok büyük bir değerde (ör. `"percent": 1e30`) Swift'in
+  Double->Int dönüşümü çalışma anında çöker ve bütün uygulama kapanır.
+  `(50...100).contains` denetimi dönüşümden SONRA geliyor, yani koruma
+  işe yaramıyor. Aynı kalıp CLI akışı ayrıştırıcılarında da var
+  (`numberValue.map(Int.init)`: kullanım/sayaç alanları). Çökme kartın
+  çözümlenmesi sırasında, onaydan önce olur. Test yok. Çözüm yönü:
+  taşan değerde nil dönen ortak bir `JSONValue.intValue` ve KeelCore'da
+  `1e30`, `-1e30`, `50.4` testleri. Çalıştırılarak doğrulanmadı.
+  (Kaynak: `App/Features/Assistant/ActionProposals.swift:145`,
+  `Packages/KeelCore/Sources/KeelCore/AI/JSONValue.swift:75-77`,
+  `Packages/KeelCore/Sources/KeelCore/AI/ClaudeCodeStream.swift:35,60,72`,
+  `Packages/KeelCore/Sources/KeelCore/AI/CodexStream.swift:42`)
+- Ayarlar'daki "Fan yardımcısı > Kaldır" fanları otomatiğe döndürmeden
+  yardımcıyı siliyor: `uninstallScript` yalnızca `launchctl bootout` ve
+  `rm` çalıştırıyor, `PerformanceModel.uninstallHelper` önce
+  `setFans(.automatic)` çağırmıyor. Fanlar elle bir hızdayken Kaldır'a
+  basılırsa "Keel kapanınca otomatiğe döner" sözünü tutacak yardımcı
+  kalmaz (`handBackFansOnQuit` yardımcı yoksa bir şey yapmıyor) ve
+  fanlar yeniden başlatmaya kadar sabit kalabilir; kullanıcıya
+  söylenmiyor. "Çökmede fanlar elle kalır" önerisinden farkı: burada
+  normal, bilinçli bir eylem aynı sonucu doğuruyor. Çözüm yönü: kaldırmadan
+  önce otomatiğe dön (ya da script başına `<executable> --keel-fan auto`),
+  sırayı testle denetle. Mac'te doğrulanmadı. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Hardware/FanHelper.swift:108-115`,
+  `App/Features/Performance/PerformanceModel.swift:178-184,189-192`,
+  `App/Features/Settings/SettingsView.swift:53`,
+  `Packages/KeelCore/Tests/KeelCoreTests/StartupAndFanTests.swift:180`)
+- Fanlar elle sabit hızda tutulurken sıcaklığa bakan bir geri çekilme
+  yok. `FanController.fixed` hızı bir kez (4 sn sonra) doğrulayıp
+  bitiyor; Keel AI %50'ye kadar inen bir ayar da önerebiliyor.
+  `SystemStatus` en sıcak CPU sensörünü zaten 4 sn'de bir okuyor, Akıllı
+  Tarama 90 °C üstünü yalnızca bulgu olarak gösteriyor. Senaryo: %60
+  seçilir, sonra uzun bir derleme başlar; fanlar sabit kalır, işlemci
+  kısılır ya da çok ısınır. Firmware koruması bunu sınırlıyor olabilir
+  (doğrulanmadı). Çözüm yönü: elle moddayken eşik (ör. 95 °C, tartışılmalı)
+  aşılırsa otomatiğe dön ve kullanıcıya söyle; karar KeelCore'da saf
+  fonksiyon olarak test edilir. Fan/yönetici yetkisi alanı, mahkeme
+  zorunlu. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Hardware/FanControl.swift:104-148`,
+  `App/SystemStatus.swift:187`,
+  `App/Features/SmartScan/SmartCare.swift:142-145`,
+  `App/Features/Performance/PerformanceModel.swift:195-209`)
