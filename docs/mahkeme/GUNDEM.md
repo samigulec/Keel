@@ -92,3 +92,46 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Aynı bundle ID'ye sahip iki kopya varken kopyalardan birini kaldırmak
+  diğerinin ayarlarını ve verisini de Çöp'e taşıyor. `loadRelated`
+  yüklü uygulamaların bundle ID'lerini `Set` içinde topluyor; iki kopya
+  (ör. `/Applications/Foo.app` ile `Foo eski.app` ya da `~/Applications`
+  altındaki bir kopya) aynı ID'yi paylaşınca küme tek elemana iniyor.
+  `AppLeftoverFinder.relatedFiles` bulduğu `~/Library` girdilerini ID'ye
+  göre eşleştirdiği için, kalan kopyanın tercihleri, Application Support'u
+  ve kapsayıcıları da kaldırılan kopyanın "artıkları" olarak listeleniyor
+  ve varsayılan olarak işaretli geliyor. `Uninstaller.perform` yalnızca
+  çalışan uygulamayı ve yolu denetliyor, aynı ID'li başka kopya var mı diye
+  bakmıyor. Senaryo: güncelleme sonrası `Foo.app` ve `Foo 2.app` yan yana
+  duruyor; kullanıcı eskisini kaldırıyor, yeni kopyanın ayarları ve
+  hesabı sıfırlanıyor. Geri al ile döner ama kullanıcı sebebini bilemez
+  (§2.2 "yalnızca seçilen öğeler": gösterilen artıklar seçilen uygulamaya
+  ait değil). Test yok: `ApplicationsTests` yalnızca farklı ID'li uygulamaları
+  deniyor. Çözüm yönü: `relatedFiles` aynı bundle ID'li başka bir yüklü
+  uygulama varsa kapsayıcı, tercih ve destek dosyalarını döndürmesin (ya da
+  planda "başka kopya var" uyarısıyla işaretsiz gelsin); karar KeelCore'da
+  `[InstalledApp]` alan saf bir fonksiyon olsun ve iki kopyalı bir test
+  yazılsın. Mac'te doğrulanmadı, kod yolu okunarak doğrulandı.
+  (Kaynak: `App/Features/Applications/ApplicationsModel.swift:209-211`,
+  `Packages/KeelCore/Sources/KeelCore/Applications/AppLeftovers.swift:66-70,87-89,103-109`,
+  `Packages/KeelCore/Sources/KeelCore/Applications/AppInventory.swift:73-76`,
+  `Packages/KeelCore/Sources/KeelCore/Applications/Uninstaller.swift:128-141`,
+  `Packages/KeelCore/Tests/KeelCoreTests/ApplicationsTests.swift:113,137,147`)
+- Keel AI giriş yardımcısı (`loginInTerminal`) çalıştırılabilir yolu kabuk
+  betiğine tek tırnakla ama kaçışsız yazıyor; yolda `'` olursa betik bozuluyor.
+  `contents` içinde `'\(executable.path)'` var, oysa aynı kod tabanında
+  `ShellCommand.quote` (tek tırnağı `'\''` yapar, testli) hazır duruyor.
+  Yol `whence -ap` çıktısından ya da `~/.local/bin`, `~/.nvm/...`
+  gibi ev klasörü altındaki sabit konumlardan geliyor; ev klasörü ya da nvm
+  sürüm adı `'` içeren bir kullanıcıda (ör. `/Users/o'neil`) Terminal
+  betiği sözdizimi hatasıyla kapanıyor, Keel ise hiçbir şey göstermiyor
+  (`do { ... } catch {}` yalnızca yazma hatasını yutuyor, betik hatası
+  zaten görünmez). Kullanıcı "Terminal'de giriş yap" yedek yolunda takılıyor.
+  Betik adı da sabit (`keel-<komut>-login.command`) ve her seferinde
+  üzerine yazılıyor. Güvenlik ilkesi (§2) değil, hata. Test yok: App
+  katmanında. Çözüm yönü: betik metnini KeelCore'da
+  `ShellCommand.join([executable.path] + loginArguments)` ile üreten
+  saf bir fonksiyona taşıyıp `'` içeren yolla test etmek. Mac'te
+  doğrulanmadı; Terminal'in `.command` dosyasındaki hatayı nasıl gösterdiği
+  denenmedi. (Kaynak: `App/Features/Assistant/CLITool.swift:203-213`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchControl.swift:64-68`)
