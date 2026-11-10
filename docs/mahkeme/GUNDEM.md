@@ -92,3 +92,80 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Büyük Dosyalar ekranında filtre (tür, konum, yaş, en az boyut) değişince
+  seçim temizlenmiyor; görünmeyen dosyalar da onaylanıp Çöp'e taşınıyor.
+  `selection` düz bir küme; `kind`, `place`, `age`, `minimumSize` değişince
+  budanmıyor, yalnızca yeniden taramada (`scan`) "bulunamayanlar" süzülüyor.
+  `selectedFiles`/`selectedBytes`/`removeSelected` süzgece bakmadan
+  seçimin tamamını kullanıyor. Onay penceresi yalnızca "N dosya Çöp
+  Kutusu'na taşınsın mı?" ve toplam boyutu yazıyor, dosya adı vermiyor.
+  Liste de en büyük 200 satırla sınırlı. Senaryo: kullanıcı "Tümü"nde
+  4 GB'lık bir videoyu işaretler, sonra "Uygulama verisi" ya da "1 GB"
+  süzgecine geçip bir şey daha işaretler; çubukta "2 dosya seçildi" yazar
+  ama ekranda biri görünür, ilk dosya görünmeden taşınır. Sayı gösterildiği
+  için tam gizli değil, ama §2.2 "önce göster, yalnızca seçilen öğeler"
+  ruhuna aykırı: onaylanan şey ekranda yok. Geri al var (zarar sınırlı).
+  Test yok (App katmanı). Çözüm yönü: süzgeç değişince seçimi görünür
+  olanlarla kesiştirmek ya da `selectedFiles`'ı `visibleFiles` ile
+  sınırlamak; alternatif olarak onay penceresinde seçilenleri adıyla
+  listelemek. Silme akışına dokunduğu için mahkeme gerekir. (Kaynak:
+  `App/Features/LargeFiles/LargeFilesModel.swift:66-70,94,144-146,177-190`,
+  `App/Features/LargeFiles/LargeFilesView.swift:51-64,75-85,216-236`)
+- Sistem servisleri tek yönetici isteminde `&&` zinciriyle çalışıyor; zincir
+  ortada kırılırsa günlük ve kart gerçeği yansıtmıyor. `setLaunchItems`
+  `.system` kapsamındaki servislerin betiklerini `{ ...; } && { ...; }`
+  diye birleştirip tek `osascript` çağrısı yapıyor. 2. serviste hata olursa
+  1. servis zaten değişmiş, 3. ve sonrası hiç denenmemiş oluyor. Ama
+  `.failed` dalı hepsini `outcome: .failed` + aynı ileti ile `startup.log`'a
+  yazıyor (1. servis için yanlış, 3. için "denenmedi" bilgisi yok) ve
+  `problems`'a tek satır ekliyor. Keel AI kartı `changed = items.count -
+  problems.count` ile başarılı sayısını tahmin ediyor; bu zincir hatasında
+  sayı tesadüfen tutuyor ama hangisinin değiştiği bilinmiyor. Senaryo: iki
+  Adobe/Google daemon'u kapatılırken ikincisi "bulunamadı" der; birincisi
+  kapalı kalır, günlük "ikisi de failed" yazar, kullanıcı hiçbir şeyin
+  değişmediğini sanır. Dokunduğu ilke: §2.7 (kayıt doğruluğu), §2.8 root
+  yolu. "Servis kartı problems sayısı" önerisinden farkı: orada kayıt
+  yazma hatası ve iptal sayımı, burada zincirin kısmi uygulanması. Karar
+  `2026-10-30-kullanici-launchagent-ac-kapat`: `&&` zinciri yalnızca
+  güvenlik/yetki açısından anıldı; kısmi başarısızlık ele alınmadı. Test
+  yok (App katmanı; betik üretimi `LaunchControl.script` testli ama
+  zincir/ayrıştırma değil). Çözüm yönü: her servis için `;` ile ayrı
+  çalıştırıp çıkış kodunu `echo "ok <label>"`/`echo "fail <label>"` diye
+  yazdırmak, çıktıyı KeelCore'da saf bir fonksiyonla ayrıştırıp servis
+  başına sonuç kaydetmek; ayrıştırıcı için Linux'ta test yazılabilir.
+  Yönetici yetkisi yoluna dokunduğu için mahkeme gerekir. Mac'te
+  doğrulanmadı: `osascript` zincirdeki kısmi çıktıyı ve çıkış kodunu nasıl
+  döndürdüğü. (Kaynak: `App/Features/Performance/SystemControl.swift:85-115`,
+  `App/Features/Assistant/ActionProposals.swift:168-175`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchControl.swift:53-60`)
+- "Sohbet geçmişini bu Mac'te sakla" kapalıyken ve "Geçmişi sil" sonrası da
+  Keel AI mesajları sağlayıcı CLI'larının kendi oturum kayıtlarında kalıyor.
+  Keel her mesajda `<keel_context>` (dosya/klasör yolları, uygulama adları,
+  servis etiketleri) ile birlikte tüm istemi komut satırı argümanı olarak
+  Claude Code'a (`-p`, `--session-id`/`--resume`) ve Codex'e (`exec`,
+  `resume`) veriyor. İkisi de konuşmayı devam ettirebilmek için oturumu
+  yerelde saklıyor. Keel'in yerel ayarı (`persist()`) ve `ChatStore`
+  yalnızca Keel'in kendi `Keel/Chats` klasörüne bakıyor; sağlayıcı CLI'ın
+  `~/.claude/projects/...` ve `~/.codex/sessions` altındaki kopyası
+  (çalışma klasörü `Application Support/Keel/claude`) hiç anılmıyor,
+  silinmiyor ve Ayarlar metni bunu söylemiyor. Senaryo: kullanıcı geçmişi
+  kapatır ya da siler, ama kişisel dosya adları içeren her mesajın bağlamı
+  CLI'ın açık metin kaydında aylarca kalır. Mevcut "dosya adları sağlayıcıya
+  gidiyor" önerisinden farkı: orada ne gönderildiği, burada gönderilenin
+  yerelde kimin elinde, ne kadar süre kaldığı ve Keel'in "sil" düğmesinin
+  buna dokunmadığı. Dokunduğu ilke: Keel AI veri akışı (PLAN "Keel AI"
+  bölümü); §2 silme ilkeleri değil. Test yok (App katmanı). Çözüm yönü:
+  önce karar: (a) Ayarlar'a "Sağlayıcı CLI'ları da kendi kaydını tutar"
+  notu ve yolları göstermek; (b) geçmiş kapalıyken Keel'in kendi
+  `previous_conversation` düzenini her mesaja koyup CLI'ı oturumsuz
+  çalıştırmak (Claude Code'da `--no-session-persistence`, Codex'te
+  `--ephemeral` bayrakları arama sonuçlarında geçiyor; Keel bunları
+  kullanmıyor); (c) "Geçmişi sil"de o çalışma klasörüne ait kayıtları da
+  silmek. Doğrulanmadı: CLI'ların kayıt yolu ve saklama süresi ile bayrak
+  adları yalnızca arama sonucu başlıklarından (belge sayfaları okunamadı,
+  izin zaman aşımı); Mac'te `~/.claude/projects` altına gerçekten ne yazıldığı
+  denenmedi. Keel AI veri akışına dokunduğu için mahkeme zorunlu.
+  (Kaynak: `App/Features/Assistant/AccountSession.swift:63-69,119-134,168-184`,
+  `App/Features/Assistant/AssistantModel.swift:331-334`,
+  `App/Features/Assistant/CLITool.swift:154-159`,
+  `App/Features/Settings/SettingsView.swift:69-76,107-111`)
