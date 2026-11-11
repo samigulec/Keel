@@ -92,3 +92,38 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Güvenlik politikası paket kütüphanelerini koruyamıyor; Fotoğraflar
+  kütüphanesi yalnızca tam yolla (`Pictures/Photos Library.photoslibrary`)
+  korunuyor, `isInsideAppBundle` ise yalnızca `.app` arıyor. İzinli kök
+  olan `~/Downloads` içindeki bir `.photoslibrary`/`.musiclibrary` "Eski
+  indirmeler"de listelenip onayla Çöp'e gidebilir (§2.4, §2.3). Doğrudan
+  alt öğeler aday oluyor, yaş klasörün kendi mtime'ından geliyor. Büyük
+  Dosyalar'ın `packageExtensions` listesi var ama `SafetyPolicy` kullanmıyor;
+  `SafetyPolicyTests`'te `photoslibrary` yok.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:75,131-141,193`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:145`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:78-95`,
+  `Packages/KeelCore/Sources/KeelCore/LargeFiles/LargeFiles.swift:121-124`)
+- Root ve sistem düzeyindeki değişiklikler hiçbir günlüğe yazılmıyor, oysa
+  §2.7 "Her işlem kaydedilir" der. App'te günlük yalnızca
+  `setLaunchItems` içinde kullanılıyor. Root LaunchDaemon kuran
+  `installHelper`, onu silen `uninstallHelper` (`rm -rf` root olarak),
+  `setFans`, `removeLoginItem` ve `restoreLoginItem` hiç kayıt bırakmıyor.
+  `LaunchActionLog` belgesi giriş öğesi kaldırmanın `ActionLog`'a
+  gittiğini söylüyor ama `ActionLog` yalnızca dosya girdisi tutuyor.
+  Test yok (App katmanı).
+  (Kaynak: `App/Features/Performance/SystemControl.swift:75-90,161-171`,
+  `App/Features/Performance/PerformanceModel.swift:138-152,166-185,195-197`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchActionLog.swift:5-9`,
+  `docs/PLAN.md:144-148`)
+- Giriş öğesi kaldırma öğeyi yola göre değil yalnızca adla siliyor. Öğenin
+  kimliği `path` (`LoginItem.id`) ve kart eşleştirmesi ad ya da yolla
+  yapılıyor, ama `LoginItemScript.remove` yalnızca `delete login item
+  "<ad>"` gönderiyor. Aynı ada sahip iki öğe varsa (ör. iki "Helper")
+  onaylanan değil, listedeki ilk eşleşen silinebilir ve kart seçilen
+  öğeyi gösterdiği için fark edilmez (§2.2 "yalnızca seçilen öğeler").
+  System Events'in yinelenen adda hangisini sildiği Mac'te doğrulanmadı;
+  adı yinelenen öğe için test yok.
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Startup/LoginItems.swift:5,43`,
+  `App/Features/Assistant/ActionProposals.swift:116`,
+  `App/Features/Performance/PerformanceModel.swift:139`)
