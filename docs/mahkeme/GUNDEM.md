@@ -166,3 +166,56 @@ Cevap:
   `App/Features/Performance/PerformanceModel.swift:22,72-79`,
   `App/Features/Performance/PerformanceView.swift:92-98,755`,
   `Packages/KeelCore/Tests/KeelCoreTests/SystemReadersTests.swift:148-164`)
+- Uygulama önbellekleri kuralı, adında nokta olmayan klasörlerin sahibini
+  bilmiyor; bu yüzden o klasörler için "çalışan uygulamanın önbelleğine
+  dokunulmaz" denetimi hiç çalışmıyor. `ChildrenSource.owner(forName:)`
+  `.bundleIDFromName` modunda adı "." içermeyen klasöre `nil` veriyor;
+  `CleanupScanner.scan` ve `CleanupExecutor.perform` yalnızca `owner != nil`
+  ise `runningApp(owning:)` bakıyor. Senaryo: JetBrains IDE açıkken (indeks
+  önbelleği `~/Library/Caches/JetBrains/...`) ya da Bundle ID'siyle değil
+  adıyla klasör açan herhangi bir uygulama çalışırken "Uygulama önbellekleri"
+  taranıyor; klasör `catalog` hariç tutma listelerinde yok, owner `nil`,
+  kart "Çalışıyor, atlandı" demeden öğeyi listeliyor ve onayda Çöp'e
+  taşıyor (varsayılan seçili kategori). Uygulama indeksi yeniden kurar ya da
+  bozuk durumda kalır. Hariç tutma listeleri bu açığı tek tek elle
+  kapatma denemesi (`Google`, `Firefox`, `BraveSoftware`...). Ayrıca denetim
+  büyük/küçük harfe duyarlı: `runningApp` `Set.contains` ile
+  karşılaştırıyor, `CleanupModel.refreshRunningApps` Bundle ID'leri
+  olduğu gibi tutuyor; `Uninstaller` ve `LargeFileRemover` ise
+  `lowercased()` kullanıyor, tutarsız. Dokunduğu ilke: §2.6. Mac'te
+  doğrulanmadı (JetBrains yolu genel bilgi, `swift` bu ortamda yok); kod yolu
+  okunarak doğrulandı. Test: `CleanupScannerTests` ve `CleanupExecutorTests`
+  yalnızca noktalı `com.spotify.client` ile deniyor; noktasız klasör ve harf
+  farkı için test yok. Çözüm yönü: `ScanContext`'e çalışan uygulamaların
+  adlarını da ekleyip (LargeFiles'taki `runningNames` gibi) noktasız klasör
+  adını bunlarla eşleştirmek, karşılaştırmayı `lowercased()` yapmak, iki
+  durumu Linux'ta test etmek. Mahkeme gerekir (silme akışı, §2.6).
+  (Kaynak: `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:97-103`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupScanner.swift:66,99-102`,
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:65`,
+  `App/Features/Cleanup/CleanupModel.swift:167-173`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupScannerTests.swift:53`)
+- "Eski indirmeler" kartı, klasörlerin yaşını yalnızca klasörün kendi
+  tarihinden hesaplıyor; içinde yakın zamanda çalışılmış bir klasör "90
+  günden uzun süredir açılmamış" diye öneriliyor. `ChildrenSource` Downloads
+  altındaki her çocuk için `FileActivity.lastActivity(of:)` çağırıyor; bu,
+  öğenin kendi değişiklik tarihi, klasöre eklenme tarihi ve Spotlight "son
+  açılma" tarihinin en büyüğü. Klasörün değişiklik tarihi yalnızca doğrudan
+  çocuklar eklenip silinince ya da yeniden adlandırılınca değişir; derindeki
+  bir dosyayı düzenlemek değiştirmez. Senaryo: kullanıcı 4 ay önce indirdiği
+  bir proje arşivini Downloads'a açmış ve hâlâ içinde çalışıyor (alt klasörde
+  dosya düzenleniyor); klasör 90 günü aşmış görünüyor, kart (§2.2 gösterilen
+  eylem gerçekle uyuşmalı) yanlış bilgiyle listeliyor. Etki sınırlı: kategori
+  varsayılan seçili değil ve Çöp'e gidiyor (geri alınabilir), ama yanlış
+  yaşla sunulan öğe kullanıcının güvenini zedeliyor. Test: tek test yalnızca
+  tek dosyayı deniyor (`old-installer.dmg`); eski klasör içinde yeni dosya
+  durumu yok. macOS'ta Spotlight'ın klasör için `kMDItemLastUsedDate`
+  davranışı doğrulanmadı. Çözüm yönü: öğe klasörse (ya da paketse) en yeni
+  alt dosya değişiklik tarihini `DirectorySizer` taramasıyla birlikte
+  toplayıp `lastActivity`'ye katmak; testi Linux'ta yazmak (eski klasör +
+  yeni iç dosya, `lastActivity` enjekte edilmediği için gerçek tarihlerle).
+  Mahkeme gerekir (silme adayı seçimi). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CandidateSource.swift:89-92`,
+  `Packages/KeelCore/Sources/KeelCore/Scanning/FileActivity.swift:12-36`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:145`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupScannerTests.swift:95`)
