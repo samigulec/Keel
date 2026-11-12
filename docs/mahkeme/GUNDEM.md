@@ -92,3 +92,77 @@ Cevap:
   tek satırlık iptal de sayımı şaşırtır. Kayıt sorunu servis sorunlarından
   ayrılmalı ve test edilmeli. (Kaynak: `App/Features/Assistant/ActionProposals.swift`,
   `changed = items.count - problems.count`; LaunchAgent aç/kapat denetimi)
+- Uygulama kaldırıcı, uygulamaya ait arka plan görevinin (LaunchAgent) plist'ini
+  Çöp'e taşıyor ama görevi launchd'den çıkarmıyor. `AppLeftoverFinder`
+  `~/Library/LaunchAgents` içinde bundle ID ile eşleşen plist'leri "Arka plan
+  görevi" diye listeliyor; `Uninstaller.perform` hepsini `moveToTrash` ile
+  taşıyor, `launchctl bootout` yok (repoda `bootout` yalnızca `LaunchControl`
+  ve `FanHelper`'da). Senaryo: kullanıcı "Sıfırla" (`removesApp == false`)
+  der; uygulamanın verisi ve plist'i Çöp'e gider, ama yüklü görev oturum
+  kapanana kadar çalışmaya devam eder (KeepAlive ise yeniden başlar) ve az
+  önce silinen tercih/destek dosyalarını yeniden yazar; kullanıcı sıfırlamanın
+  işe yaramadığını sanır. Tam kaldırmada uygulama gidince görev başlatamaz
+  hale gelir, ama launchd kaydı oturum sonuna kadar kalır. Çalışan-uygulama
+  denetimi (§2.6 ruhu) yalnızca ana uygulamanın bundle ID'sine bakıyor
+  (`NSWorkspace.runningApplications`), yardımcı görevi görmüyor. Dokunduğu
+  ilke: §2.2 (gösterilen eylem gerçekle uyuşmalı), §2.6 ruhu. launchd'nin
+  silinen plist'e sahip yüklü görevi bıraktığı genel bilgi; Mac'te
+  doğrulanmadı, `swift` bu ortamda yok. Test yok: `ApplicationsTests`
+  içinde `launchAgents` geçmiyor. Çözüm yönü: planda `.launchAgents`
+  öğesi varsa taşımadan önce `gui/<uid>/<Label>` için `bootout` çalıştır
+  (kullanıcı alanı, yönetici şifresi gerekmez; `LaunchControl`'ün komut
+  üretimi KeelCore'da yeniden kullanılabilir) ya da kartta "çıkış/yeniden
+  oturum gerekir" uyarısı göster; komut üretimi Linux'ta test edilir. Mahkeme
+  gerekir (silme akışı). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Applications/AppLeftovers.swift:58`,
+  `Packages/KeelCore/Sources/KeelCore/Applications/Uninstaller.swift:129-165`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchControl.swift:53-60`,
+  `Packages/KeelCore/Tests/KeelCoreTests/ApplicationsTests.swift`)
+- Yeniden açılan eski sohbetin geçmişi, son mesaj uzunsa modele hiç
+  gönderilmiyor ve kullanıcıya söylenmiyor. `ChatStore.transcript` mesajları
+  yeniden eskiye doğru geziyor ve `length + line.count > 6_000` olunca
+  `break` ediyor. En yeni mesajın kendisi 6.000 karakterden uzunsa (uzun bir
+  Keel AI cevabı ya da kullanıcının yapıştırdığı metin) ilk turda duruyor ve
+  sonuç boş dize oluyor. `AssistantModel.send` yine de boş metni
+  `<previous_conversation>\n\n</previous_conversation>` içine sarıp
+  gönderiyor ve `restoredTranscript`'i tüketiyor. Senaryo: kullanıcı uzun bir
+  dosya listesi cevabı olan sohbeti açıp "ilkini silelim mi?" diye soruyor;
+  model hiçbir bağlam görmüyor ve bağlamsız cevap veriyor. Önceki "ilk mesaj
+  başarısız olursa geçmiş kayboluyor" önerisinden farkı: orada gönderim
+  hatası, burada başarılı gönderimde bile geçmişin sessizce boş kalması.
+  Karar "en yeni mesajı kırp, hiç yoksa uyar" olmalı; şimdi uzun mesaj
+  tüm geçmişi siliyor. Dokunduğu ilke: Keel AI veri akışı (sözleşmeye göre
+  yalnızca özet veri gider; bu boş bağlam o sözü bozmuyor, doğruluğu
+  bozuyor), §2 değil. Test yok: `ChatStore` App katmanında,
+  `Tests/` altında `transcript` geçen test yok. Çözüm yönü: son mesajı
+  `maxCharacters`'e kırpıp dahil etmek, sonuç boşsa `<previous_conversation>`
+  bloğunu hiç eklememek; `transcript`'i KeelCore'a taşıyıp "tek uzun mesaj",
+  "kısa mesajlar", "notice atlanır" testlerini yazmak (Linux'ta çalışır).
+  Mac'te doğrulanmadı; kod yolu okunarak doğrulandı. (Kaynak:
+  `App/Features/Assistant/ChatStore.swift:80-90`,
+  `App/Features/Assistant/AssistantModel.swift:178-182,371`)
+- Performans ekranındaki "En çok işlemci kullananlar" kartı, tam liste gibi
+  sunuluyor ama sistemin en çok CPU kullanan süreçlerini göremeyebilir.
+  `ProcessCPU.sample` `guard pid > 0` ile `kernel_task`'ı (pid 0) açıkça
+  atıyor ve `proc_pidinfo(PROC_PIDTASKINFO)` başarısız olan her süreci
+  sessizce bırakıyor; belge yorumu "kullanıcının inceleyebildiği süreçler"
+  diyor, ama kartta (`CardTitle` yalnızca "% bir çekirdeğe göre" der) bu
+  sınır yok. Senaryo: Mac ısınıyor ve fanlar yükseliyor, sebep
+  `kernel_task` ya da root altında çalışan `mds_stores`/`WindowServer`;
+  kart başka (kullanıcı) süreçleri sıralıyor ve kullanıcı yanlış uygulamayı
+  kapatıyor. Aynı kök: sınır `ProcessMemory.samples` için de geçerli ama
+  orada liste yalnızca GUI uygulamaları. Ayrıca `lastProcessSample`
+  ekrandan çıkınca korunuyor; 10 dk sonra ekrana dönüşte ilk yenileme 10
+  dakikalık ortalamayı anlık değer gibi gösteriyor (sonraki tur düzeliyor).
+  Root süreçlerinin okunamaması genel bilgi, Mac'te doğrulanmadı. Test:
+  `SystemReadersTests` yalnızca `usage` hesabını deniyor ve fixture'da
+  `kernel_task`'ı pid 1 ile (gerçekte launchd) yazmış; `sample()` için
+  test yok. Çözüm yönü: kartın altına "Yalnızca senin süreçlerin; sistem
+  süreçleri okunamaz" notu (ya da okunamayan süreçlerin toplamını "diğer"
+  satırıyla göstermek, `host_statistics` toplamıyla farkı hesaplayarak),
+  ekrana her girişte `lastProcessSample`'ı sıfırlamak, fixture'ı düzeltmek.
+  PLAN §2'ye değmiyor, salt okunur. (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/System/ProcessCPU.swift:36-61,70-90`,
+  `App/Features/Performance/PerformanceModel.swift:22,72-79`,
+  `App/Features/Performance/PerformanceView.swift:92-98,755`,
+  `Packages/KeelCore/Tests/KeelCoreTests/SystemReadersTests.swift:148-164`)
