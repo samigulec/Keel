@@ -436,3 +436,84 @@ Cevap:
   puan formülü kararı). (Kaynak: `docs/PLAN.md:58`,
   `App/Features/SmartScan/SmartCare.swift:45-173`,
   `App/Features/SmartScan/SmartScanView.swift:53,92-103,239`)
+- Büyük Dosyalar bulucusu, iCloud Drive ile eşitlenen Masaüstü ve Belgeler
+  klasörlerindeki dosyaları (ve ev klasöründeki Dropbox/OneDrive gibi
+  eşitlenen klasörleri) ayırt etmeden listeliyor ve Çöp'e taşıyabiliyor;
+  ekrandaki metin ise "iCloud ... listelenmez" diyor. `LargeFileScanner.scan`
+  ev klasörünün üst düzey klasörlerini tarıyor, yalnızca `Library`,
+  `Applications` ve `.Trash`'i atlıyor; bu yüzden `~/Desktop` ve `~/Documents`
+  içeri giriyor. iCloud'a ait olan tek yer (`~/Library/Mobile Documents`)
+  zaten `Library` altında olduğu için dışarıda kalıyor, yani metindeki iddia
+  yalnızca bu dar anlamda doğru. Senaryo: kullanıcı "Masaüstü ve Belgeler
+  iCloud'da" açıkken 2 GB'lık eski bir video projesini Büyük Dosyalar'dan
+  seçip "Çöp'e taşı" diyor; dosya yalnızca bu Mac'ten değil, aynı Apple
+  Hesabı'ndaki tüm cihazlardan gider. Apple'a göre "bir cihazda sildiğin dosya
+  her cihazda silinir", 30 gün "Son Silinenler"den kurtarılabilir, sonra
+  kalıcı silinir (https://support.apple.com/109344). Arayüz bunu söylemiyor,
+  "Geri al" yalnızca bu Mac'in Çöp'ünü geri koyar ve onay metni eşitleme
+  etkisinden bahsetmiyor. Dokunduğu ilke: §2.4 (iCloud Drive korunan yol; kod
+  yalnızca `Library/Mobile Documents` yolunu koruyor, yani iCloud'un
+  `~/Desktop` ve `~/Documents` biçimi korunmuyor), §2.2 (gösterilen şey
+  gerçekle uyuşmalı: ekran "iCloud listelenmez" diyor). Etki sınırlı: dosya
+  Çöp'e gidiyor ve iCloud tarafında 30 gün kurtarılabiliyor. `FileActivity` ve
+  `size` allocated size kullandığı için yalnızca yerelde indirilmiş dosyalar
+  listeleniyor; bu da kullanıcının "bu zaten Mac'imde yer kaplıyor" diye
+  bakmasına yol açıyor. Mac'te doğrulanmadı: iCloud Masaüstü/Belgeler
+  dosyalarında `URLResourceKey.isUbiquitousItemKey` değerinin `true` dönmesi
+  ve üçüncü taraf eşitleme klasörlerinin düzeni (modern sürümler
+  `~/Library/CloudStorage` kullanıyor, o zaten atlanıyor; eski `~/Dropbox`
+  düzeni genel bilgi). `swift` bu ortamda yok; kod yolu okunarak doğrulandı.
+  Test yok: `LargeFilesTests.swift` yalnızca `Documents/Projects`, `Thing.app`
+  ve `Documents/Folder` ile deniyor, eşitlenen dosya durumu geçmiyor. Çözüm
+  yönü: tarayıcıda ve `LargeFileRemover.perform` içinde (derinlemesine
+  savunma, ikincisi mevcut "tüm ev klasörünü izinli kök sayıyor" önerisinden
+  ayrı bir kontrol) `.isUbiquitousItemKey` true olan dosyaları işaretlemek;
+  seçenekler: (a) listeden çıkarmak, (b) listede "iCloud'da eşitleniyor:
+  silersen tüm cihazlardan gider" rozetiyle göstermek ve onay metnine eklemek,
+  (c) varsayılan reddetmek. Kontrol `FileManager`'a dayandığı için Linux'ta
+  enjekte edilebilir bir `isSynced: (URL) -> Bool` ile test edilir; her
+  durumda `LargeFilesView.swift:104` metni gerçeği yansıtacak biçimde
+  düzeltilmeli. Mahkeme gerekir (silme akışı, korunan yol kuralı, §2.4).
+  (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/LargeFiles/LargeFiles.swift:74,138-161,245-272`,
+  `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:187-194`,
+  `App/Features/LargeFiles/LargeFilesView.swift:104`,
+  `Packages/KeelCore/Tests/KeelCoreTests/LargeFilesTests.swift:15-33`,
+  https://support.apple.com/109344)
+- Keel AI'nın "Neler paylaşılır?" notu, hesap sağlayıcısına (ChatGPT/Claude)
+  her mesajda gerçekte giden veriden dar. Not şunu söylüyor: "Sistem özeti,
+  önbellek klasörlerinin adları ve boyutları, uygulama ve servis adları.
+  Dosyalarının içeriği asla gönderilmez." Ama `AccountSession` bağlamı
+  kurarken kullanıcı Büyük Dosyalar taramasını bir kez yaptıysa
+  `KeelTools.largeFilesSummary(largeFiles.files)` ile en büyük 30 kişisel
+  dosyanın adını ve tam klasör yolunu (`FileText.folder`:
+  `~/Documents/Vergi/2025`, `~/Desktop/Dava` gibi), boyutunu, türünü ve kaç
+  gün önce açıldığını da her mesajın başına ekliyor; kullanıcı AI'ya bunu
+  sormasa bile. Bağlama ayrıca giriş öğesi adları (`loginItems`) ve kurulu
+  uygulamaların listesi giriyor; onlar notta kısmen sayılı ("uygulama ve
+  servis adları"), kişisel dosya adları sayılı değil. Senaryo: kullanıcı
+  yalnızca "Mac'im neden yavaş?" diye soruyor; daha önce Büyük Dosyalar
+  ekranına bakmış olduğu için `Boşanma-dilekçesi-taslak.pdf` gibi dosya adları
+  ve klasörleri hesap sağlayıcısına gidiyor. Kullanıcı notu okuyup "yalnızca
+  önbellek klasörlerinin adları" diye düşünüyor. Dokunduğu ilke: Keel AI veri
+  akışı (PLAN Keel AI bölümü: "Yalnızca özet sistem verileri gönderilir, dosya
+  içeriği asla"; içerik gerçekten gitmiyor, ama bu not gerçekle uyuşmuyor,
+  §2.2 ruhu). Mevcut "bağlamdaki dış kaynaklı dizgeler veri diye
+  işaretlenmiyor" önerisiyle aynı kökten değil: o enjeksiyon güvenliği, bu
+  rıza metninin eksikliği ve gönderilen veri kapsamı. Test yok: bağlam kurma
+  ve `PrivacyNote` App katmanında; `KeelContext`/`largeFiles` KeelCore
+  testlerinde geçmiyor. Çözüm yönü: (a) not metnine "tarama yaptıysan en büyük
+  dosyalarının adları ve klasörleri" eklemek, ya da (b) dosya adlarını
+  varsayılan olarak göndermeyip yalnızca tür/boyut/yaş özetini vermek (`name`
+  ve `folder` alanları kullanıcı AI kartında "dosya adlarını paylaş" ile
+  açılsın); (c) hangi alanların gittiğini üreten saf fonksiyonu KeelCore'a
+  alıp "kişisel dosya adı bağlamda yok / not metniyle uyuşuyor" testini
+  Linux'ta yazmak. Not: bağlam `keel_context` içinde olduğu için Apple
+  Intelligence (cihaz içi) yolunda sorun yok, yalnızca hesap sağlayıcılar
+  için. Hangi alanların gittiği kod okunarak doğrulandı, Mac'te çalıştırılıp
+  gerçek isteme bakılmadı. Mahkeme gerekir (Keel AI veri akışı). (Kaynak:
+  `App/Features/Assistant/AccountSession.swift:311-314,319-327`,
+  `App/Features/Assistant/KeelTools.swift:223-244`,
+  `App/Features/LargeFiles/LargeFilesView.swift:371-376`,
+  `App/Features/Assistant/AssistantView.swift:146-160`,
+  `docs/PLAN.md:158-159`)
