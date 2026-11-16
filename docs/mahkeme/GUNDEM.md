@@ -517,3 +517,89 @@ Cevap:
   `App/Features/LargeFiles/LargeFilesView.swift:371-376`,
   `App/Features/Assistant/AssistantView.swift:146-160`,
   `docs/PLAN.md:158-159`)
+- Keel AI motoru, bir tur `max_tokens`/`length`, `refusal` ya da bilinmeyen
+  bir nedenle kesilince, yarım kalan araç çağrısını geçmişe yazıyor ama
+  sonuç mesajını eklemiyor; sohbet bir sonraki mesajda API hatasıyla
+  kalıcı olarak bozuluyor. `AssistantEngine.runLoop` önce
+  `history.append(turn.assistantMessage)` yapıyor (satır 82). Sonra
+  `.refusal, .maxTokens, .other` durumunda araçları çalıştırmadan `return`
+  ediyor (86-89), yani `backend.toolResultMessages` hiç eklenmiyor. Kesilen
+  turun mesajı Anthropic'te `tool_use` bloğu, OpenAI uyumlu yolda
+  `tool_calls` taşıyabiliyor (`OpenAICompatibleBackend.swift:134-143`,
+  `AnthropicBackend.swift:194-229`). `send` yalnızca hata fırlatınca
+  geri sarıyor (68-75); burada hata yok, bozuk mesaj geçmişte kalıyor.
+  Senaryo: kullanıcı Ollama/LM Studio gibi yerel bir modelle (çıktı sınırı
+  küçük olabilir) bir araç çağrısının ortasında `finish_reason: "length"`
+  alıyor; ekranda "yanıt kesildi" notu çıkıyor, ama kullanıcı sonraki
+  mesajı yazınca istek reddediliyor ve her yeni mesaj aynı hatayı veriyor
+  (sohbeti yeniden başlatmadan düzelmiyor). Hem Anthropic hem OpenAI
+  belgeleri `tool_use`/`tool_calls` mesajının ardından sonuç beklediğini
+  söylüyor; bu genel API bilgisi, Mac'te ve gerçek sağlayıcıyla
+  doğrulanmadı. Test: `AssistantTests.swift:209-216` yalnızca düz metinli
+  `refusal` deniyor; kesilmiş araç çağrısı ve ardından ikinci `send` için
+  test yok. Çözüm yönü: bu üç durumda (`toolCalls` boş değilse) ya her
+  çağrı için "iptal edildi/kesildi" `is_error` sonucu ekleyip geçmişi
+  tutarlı bırakmak, ya da turun mesajını geçmişe hiç yazmamak (ya da yalnızca
+  metin bloklarını yazmak); ikisi de Linux'ta `ScriptedTransport` ile
+  test edilir (kesik turdan sonra ikinci `send` geçerli bir istek
+  üretmeli). PLAN §2'ye değmiyor; Keel AI davranışı. Mahkeme gerekmez
+  (hata düzeltmesi, veri akışı değişmiyor). Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/AI/AssistantEngine.swift:67-108`,
+  `Packages/KeelCore/Sources/KeelCore/AI/OpenAICompatibleBackend.swift:134-153`,
+  `Packages/KeelCore/Sources/KeelCore/AI/AnthropicBackend.swift:194-229`,
+  `App/Features/Assistant/AssistantModel.swift:308-314`,
+  `Packages/KeelCore/Tests/KeelCoreTests/AssistantTests.swift:209-216`
+- OpenAI uyumlu akış çözümleyicisi, araç çağrısı parçasında `index` yoksa
+  hepsini 0. sıraya yazıyor; hazır ayarlardaki Google Gemini uç noktası
+  bu alanı göndermiyor. `OpenAIStreamAccumulator.consume` içinde
+  `fragment["index"]?.numberValue.map(Int.init) ?? 0` (satır 110); ad ve
+  argümanlar `+=` ile birleşiyor (113-114). Gemini'nin OpenAI uyumluluk
+  uç noktasının akışta `tool_calls` içinde `index` göndermediği Google
+  forumunda bildirilmiş ve 19 Kasım 2025'te hâlâ çözülmediği yazılmış
+  (https://discuss.ai.google.dev/t/gemini-openai-compatibility-issue-with-tool-call-streaming/59886);
+  aynı yanıtta paralel araç çağrısı gelip gelmediği bu kaynakta
+  doğrulanmadı, Mac'te Gemini ile denenmedi. Senaryo: kullanıcı Gemini'yi
+  seçiyor ve model aynı turda iki araç çağırıyor (ör. bellek ve disk
+  özeti); iki çağrı tek girdide birleşiyor, ad `get_top_memory_appsget_...`
+  gibi bozuk çıkıyor, motor "Unknown tool" ya da `INVALID_JSON` döndürüyor
+  ve model bunu tekrar tekrar deniyor (en çok 12 adım). Tek çağrı gelirse
+  sorun yok, yani hata belirsiz aralıklarla görünür. Test:
+  `AssistantTests.swift:248-277` yalnızca `index` alan, tek çağrılı akışı
+  deniyor. Çözüm yönü: parçada `index` yoksa ya da aynı sıradaki girdide
+  farklı bir `id` gelirse yeni girdi aç (`id` boş değilse ve mevcut
+  `id`'den farklıysa); "indekssiz iki çağrı" ve "indeksli parçalı tek
+  çağrı bozulmuyor" testlerini Linux'ta yaz. PLAN §2'ye değmiyor.
+  Mahkeme gerekmez (küçük hata düzeltmesi). Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/AI/OpenAICompatibleBackend.swift:96-120`,
+  `Packages/KeelCore/Sources/KeelCore/AI/OpenAICompatibleBackend.swift:20`,
+  `Packages/KeelCore/Tests/KeelCoreTests/AssistantTests.swift:248-277`
+- Temizlik ekranı ve Keel AI temizlik kartı, Çöp Kutusu'na taşınan
+  öğeler için de "X temizlendi" diyor; yer o anda açılmıyor. Bu, mevcut
+  "Akıllı Tarama temiz diyor" önerisinden ve Uygulamalar/Büyük Dosyalar
+  metinlerinden ayrı bir sorun. `CleanupReport.freedBytes` `removed`
+  içindeki tüm öğelerin boyutunu topluyor; bunlar çoğunlukla
+  `.moveToTrash` (`CleanupExecutor.swift:15,81-90`) ve yalnızca Çöp
+  Kutusu kategorisi `.deletePermanently`. `CleanupView.swift:410` ve
+  `AssistantView.swift:404` bu toplamı "temizlendi" diye gösteriyor;
+  Uygulamalar ve Büyük Dosyalar ekranları ise doğru söylüyor ("Çöp
+  Kutusu'na taşındı", `ApplicationsView.swift:615`,
+  `LargeFilesView.swift:334`). Onay metni de doğru
+  (`CleanupView.swift:152-155`), yani yanlışlık yalnızca sonuç
+  başlığında. Senaryo: kullanıcı 8 GB önbellek temizliyor, başlıkta "8 GB
+  temizlendi" görüyor, Finder'da disk doluluğu değişmiyor ve Keel'in
+  çalışmadığını sanıyor; Çöp'ü boşaltması gerektiğini bilmiyor. Dokunduğu
+  ilke: §2.2 (gösterilen eylem gerçekle uyuşmalı). Test:
+  `CleanupExecutorTests.swift:29` yalnızca `freedBytes`'ın toplamını
+  doğruluyor; "Çöp'e taşınanlar boşalan alan sayılmaz" testi yok. Çözüm
+  yönü: raporda `trashedBytes` ile `deletedBytes`'ı ayır (`freedBytes`
+  yalnızca kalıcı silinenler); başlıkları "X Çöp Kutusu'na taşındı" /
+  "Y kalıcı silindi" yap, altına "Çöp Kutusu'nu boşaltınca yer açılır"
+  notu ekle; ayırmayı Linux'ta test et. Silme akışının davranışı
+  değişmiyor, yalnızca raporlama; mahkeme gerekmez (metin ve rapor alanı),
+  ama `CleanupReport` sözleşmesi Keel AI sonucunu da değiştirdiği için
+  bakılsın. Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:15,81-90`,
+  `App/Features/Cleanup/CleanupView.swift:152-155,410`,
+  `App/Features/Assistant/AssistantView.swift:394-405`,
+  `App/Features/Applications/ApplicationsView.swift:615`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupExecutorTests.swift:29`
