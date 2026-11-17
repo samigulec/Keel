@@ -603,3 +603,105 @@ Cevap:
   `App/Features/Assistant/AssistantView.swift:394-405`,
   `App/Features/Applications/ApplicationsView.swift:615`,
   `Packages/KeelCore/Tests/KeelCoreTests/CleanupExecutorTests.swift:29`
+- Keel AI hesap yolunda (Claude Code, Codex) konuşmanın tamamı, `<keel_context>`
+  dahil, sağlayıcı CLI'ının kendi diskindeki kayıtlarında kalıyor; Keel'in
+  "Sohbet geçmişini bu Mac'te sakla" anahtarı ve "Geçmişi sil" düğmesi bunlara
+  dokunmuyor. Keel sohbeti sürdürmek için Claude'da `--session-id`/`--resume`,
+  Codex'te `resume <thread>` kullanıyor, yani CLI'ın oturumu diske yazması
+  koda gömülü bir bağımlılık; Codex'e `--ephemeral` ya da Claude'a
+  `--no-session-persistence` verilmiyor. Her mesajın başındaki bağlamda (Büyük
+  Dosyalar taraması yapıldıysa) dosya adları, tam klasör yolları, uygulama ve
+  servis adları var; bunlar CLI'ın kayıt dosyalarında (Claude Code için
+  `~/.claude/projects/<proje>/<oturum>.jsonl`, Codex için
+  `~/.codex/sessions/.../rollout-*.jsonl`) düz metin kalır. Senaryo:
+  kullanıcı geçmişi saklamayı kapatır ya da "Geçmişi sil"e basar, Ayarlar
+  "N kayıtlı sohbet" der ve gizlilik metni "Keel'in sildiği ... kayıt
+  dosyalarına yazılır" diyor; kullanıcı sohbetin izinin kalmadığını sanır,
+  oysa `Application Support/Keel/claude` çalışma klasörüne ait CLI kayıtları
+  duruyor. Mevcut "Neler paylaşılır?" önerisinden farkı: orası sağlayıcıya
+  GİDEN veri kapsamı, bu Keel dışına (CLI'ın yerel deposuna) YAZILAN kalıntı
+  ve Keel'in silme/saklama anahtarlarının gerçeği yansıtmaması. Dokunduğu
+  ilke: Keel AI veri akışı, §2.2 ruhu (gösterilen şey gerçekle uyuşmalı).
+  Doğrulanmadı: `claude -p` ve `codex exec`'in varsayılan olarak oturumu
+  yazdığı yalnızca dolaylı kanıtlı (`--resume` bunu gerektirir); Claude
+  Code'un `--no-session-persistence` bayrağı bir üçüncü taraf yazısında
+  geçiyor (vincentschmalbach.com, "where-claude-code-and-codex-store-session-
+  transcripts"), Codex `--ephemeral` için doğrulama yok; Mac'te kayıt
+  dosyalarına bakılmadı. Test yok: bu akış App katmanında. Çözüm yönü: (a)
+  Ayarlar ve gizlilik metnine "Claude/ChatGPT kendi kayıtlarını da tutar"
+  uyarısı ve kayıt klasörünün yolu; (b) çalışma klasörü Keel'e ait olduğu
+  için "Geçmişi sil" bu klasörün kayıtlarını da (yalnızca `Keel/claude` ve
+  `Keel/codex` ile eşleşen proje kayıtları) temizlesin, bu silme
+  `SafetyPolicy`'den geçmeli; (c) geçmiş kapalıyken sürdürmeden vazgeçip
+  bayrakla kayıt tutmayı kapatmak (eski mesajlar `restoredTranscript` ile
+  yeniden verilir). Mahkeme gerekir (Keel AI veri akışı; (b) silme).
+  (Kaynak: `App/Features/Assistant/AccountSession.swift:120-133,168-184`,
+  `App/Features/Assistant/CLITool.swift:152-159`,
+  `App/Features/Settings/SettingsView.swift:69-76,79-83`,
+  `App/Features/Assistant/ChatStore.swift:22-24`,
+  `App/Features/Assistant/AssistantModel.swift:333,374-376`,
+  https://www.vincentschmalbach.com/where-claude-code-and-codex-store-session-transcripts-and-how-to-keep-secrets-out-of-them/)
+- İşlem günlükleri (`actions.log`, `startup.log`) iki yazıcı aynı anda
+  eklerse satır kaybedebilir; bu §2.7 "Her işlem kaydedilir" ilkesini
+  sessizce çiğner. `ActionLog.append` dosyayı `FileHandle(forWritingTo:)`
+  ile açıp `seekToEnd()` ve `write` yapıyor: `O_APPEND` ya da kilit yok;
+  iki yazıcı aynı dosya sonunu görürse ikincisi birincinin satırının
+  üstüne yazar. `LaunchActionLog.append` aynı kalıp. Yazıcılar birbirinden
+  bağımsız: `CleanupModel.cleanAndWait`, `ApplicationsModel.perform` ve
+  `LargeFilesModel` kendi `Task.detached` içinde ve yalnızca kendi `phase`
+  korumasıyla çalışıyor; `Undo.restore` da ayrı bir detached görev. Senaryo:
+  Akıllı Tarama'dan "Önerilenleri temizle" başlar, bitmeden kullanıcı
+  kenar çubuğundan Büyük Dosyalar'a geçip dosya taşır; bir dosyanın
+  "removed" satırı kaybolur, geri alma ve inceleme için tutulan kayıt
+  eksik kalır. `SystemControl.setLaunchItems` yorumu ("so that overlapping
+  calls never mix up a log write") sorunu `startup.log` için biliyor ve
+  yalnızca o çağrıyı MainActor'a bağlıyor; `ActionLog` için eşdeğeri
+  yok. Mevcut "günlük `try?` ile yazılıyor" önerisinden farkı: orada hata
+  yutuluyor, burada hata yok, yazma başarılı görünüp satır ezilebiliyor.
+  Mac ya da Linux'ta yarışı yeniden üretmedim; `FileHandle` yazımının
+  `O_APPEND` olmadan geçerli konumdan yazdığı genel bilgi. Test yok:
+  `LaunchActionLogTests` ve `UndoTests` yalnızca sıralı ekleme deniyor.
+  Çözüm yönü: `open(path, O_WRONLY|O_APPEND|O_CREAT, 0o644)` ile tek
+  `write(2)` (POSIX append atomikliği) ya da ortak bir kilit; ortak yardımcı
+  iki günlüğe de uygulanır; Linux'ta `DispatchQueue.concurrentPerform` ile
+  200 eşzamanlı ekleme sonrası 200 geçerli satır testi. Silme mantığı ve
+  `SafetyPolicy` değişmiyor, yalnızca günlük yazımı; küçük hata düzeltmesi,
+  mahkeme gerekmez (CLAUDE.md silme akışına dokunan değişikliği zorunlu
+  saydığı için sınırda: sahibi isterse mahkemeye alınır). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Actions/ActionLog.swift:42-60`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchActionLog.swift:63-81`,
+  `App/Features/Cleanup/CleanupModel.swift:148-150`,
+  `App/Features/Applications/ApplicationsModel.swift:242-245`,
+  `App/Features/LargeFiles/LargeFilesModel.swift:185-186`,
+  `App/Features/Cleanup/Undo.swift:6-10`,
+  `App/Features/Performance/SystemControl.swift:68-73`)
+- KeelCore'daki API anahtarlı yapay zeka motoru uygulamada hiç kullanılmıyor
+  ve PLAN'ın Keel AI sözüyle ("API anahtarı yok", "Keel kimlik bilgisi görmez
+  ya da saklamaz") çelişiyor. `AssistantEngine`, `AnthropicBackend`
+  (`x-api-key`, `api.anthropic.com`), `OpenAICompatibleBackend` (`Bearer`,
+  keyfi `baseURL`, hazır ayarlar: Ollama, LM Studio, Gemini...),
+  `ModelCatalog`, `URLSessionTransport` ve `ServerSentEvents` (toplam ~670
+  satır) yalnızca kendi dosyalarında ve `AssistantTests.swift`'te geçiyor;
+  `App/` altında hiçbir referans yok (Grep: 6 dosya, hepsi `Packages/` ya da
+  docs). App hesap yolunu (`AccountSession`, CLI) ve Apple Intelligence'ı
+  kullanıyor. Kod `02c21eb "Keel AI core: bring-your-own provider chat
+  engine"` ile gelmiş, 2026-10-22/23'te CLI yoluna geçilince arayüze hiç
+  bağlanmamış. Zararı: (1) KeelCore ağa çıkan, anahtar taşıyan bir yüzey
+  barındırıyor (`Bağımlılık: mümkün olduğunca sıfır`, "denetlenebilir
+  olmalı" ilkesine ters); ileride biri bağlarsa PLAN'ın kimlik bilgisi sözü
+  sessizce bozulur. (2) Gündemdeki iki öneri bu ölü kodu düzeltmeyi
+  hedefliyor (`AssistantEngine.runLoop` kesik araç çağrısı, OpenAI akışında
+  `index` yok): önce kodun yaşayıp yaşamayacağına karar verilmeli, yoksa
+  zaman ölü kodda harcanır. Seçenekler: sil (testleriyle) ya da PLAN'a
+  "ileride, bağlı değil" notuyla işaretle ve o iki öneriyi askıya al.
+  Dokunduğu ilke: PLAN Keel AI bölümü (kimlik bilgisi), §1 "Bağımlılık"
+  kararı. Doğrulama: yalnızca Grep ile referans yokluğu (dinamik ya da
+  proje dışı kullanım olmadığı `project.yml` ve `Package.swift`'e bakılarak
+  varsayıldı, `project.yml` açıp okunmadı). Mahkeme gerekir (mimari karar,
+  silme/bağımlılık). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/AI/AssistantEngine.swift:32`,
+  `Packages/KeelCore/Sources/KeelCore/AI/AnthropicBackend.swift:30-36,70`,
+  `Packages/KeelCore/Sources/KeelCore/AI/OpenAICompatibleBackend.swift:22-32,62`,
+  `Packages/KeelCore/Sources/KeelCore/AI/ModelCatalog.swift:28-38`,
+  `Packages/KeelCore/Tests/KeelCoreTests/AssistantTests.swift:76`,
+  `docs/PLAN.md:156-159`)
