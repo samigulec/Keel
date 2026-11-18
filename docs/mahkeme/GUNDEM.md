@@ -705,3 +705,100 @@ Cevap:
   `Packages/KeelCore/Sources/KeelCore/AI/ModelCatalog.swift:28-38`,
   `Packages/KeelCore/Tests/KeelCoreTests/AssistantTests.swift:76`,
   `docs/PLAN.md:156-159`)
+- Giriş öğesi kaldırma, fan ayarı ve fan yardımcısı kurulumu/kaldırma
+  hiçbir işlem günlüğüne yazılmıyor; sistem servisi toplu işleminde ise
+  günlük gerçeği yanlış yazıyor. §2.7 "Her işlem kaydedilir" der. Bugün
+  yalnızca `SystemControl.setLaunchItems` `startup.log`'a yazıyor
+  (`LaunchActionLog`), silmeler `actions.log`'a gidiyor. Bunların hiçbiri
+  yazmıyor: `PerformanceModel.removeLoginItem` / `restoreLoginItem`
+  (System Events'ten "girişte açılsın" öğesini siler/ekler),
+  `PerformanceModel.setFans` ve `SystemControl.installHelper` /
+  `uninstallHelper`. Son ikisi yönetici şifresiyle root olarak çalışır,
+  yardımcı kurulumu ise kalıcı bir LaunchDaemon bırakır. Keel AI
+  kartlarındaki `.removeLoginItems` ve `.fans` eylemleri aynı yollardan
+  geçtiği için onlar da kayıtsız. `App/` altında `ActionLog` ya da
+  `LaunchActionLog` yalnızca `SystemControl.swift:75-90`'da geçiyor.
+  Senaryo: kullanıcı Keel AI kartıyla bir giriş öğesini kaldırıyor ve
+  fanları %100'e alıyor. Sonra "Keel ne değiştirdi?" diye `~/Library/Logs/
+  Keel/`'a bakıyor, hiçbir iz yok. Ayrıca sistem servisleri tek yönetici
+  isteminde `A && B && C` olarak çalışıyor (`SystemControl.swift:102`).
+  B başarısız olursa A zaten değişmiş oluyor, C hiç denenmemiş oluyor.
+  `case .failed` ise (satır 111-114) hepsini `.failed` yazıyor; günlük
+  gerçekten değişen A için yalan söylüyor. Bu, gündemdeki "`problems` satır
+  sayısı" önerisinden ayrı (orası kart sayımı, burası günlük içeriği).
+  Bekleyen "LaunchAgent aç/kapat" 2. sorusu (§2.7 servisleri kapsıyor mu)
+  yalnızca servisleri sorar; giriş öğesi, fan ve yardımcı sorulmadı. Test
+  yok: bu kod `App/`'te, `LaunchActionLogTests` yalnızca sıralı ekleme
+  deniyor. Çözüm yönü: `LaunchActionLog.Entry`'ye (ya da ortak bir
+  "system change" günlüğüne) `loginItem`, `fan` ve `helper` eylemleri
+  eklemek; toplu sistem betiğini öğe başına çalıştırmak ya da sonrasında
+  `print-disabled` ile gerçek durumu okuyup günlüğe onu yazmak; saf giriş
+  oluşturmayı KeelCore'da Linux'ta test etmek. Mahkeme gerekir (yönetici
+  yetkisi, §2.7/§2.8). (Kaynak:
+  `App/Features/Performance/PerformanceModel.swift:138-152,166-184,195-209`,
+  `App/Features/Performance/SystemControl.swift:75-90,102-114,161-171`,
+  `App/Features/Assistant/ActionProposals.swift:178-184,202-206`,
+  `Packages/KeelCore/Sources/KeelCore/Startup/LaunchActionLog.swift:1-10`)
+- Çöp Kutusu kategorisi, içindeki `.app` paketlerini hiç silemiyor; Keel'in
+  kendi kaldırıcısının Çöp'e attığı uygulamalar dahil. `SafetyPolicy.evaluate`
+  yolun kendisi gerçek bir paket olduğunda de `.insideAppBundle` diyor:
+  `isInsideAppBundle` yolun son bileşenini de dolaşıyor ve `.app` adı +
+  `Contents/Info.plist` varsa true dönüyor. Test bunu açıkça bekliyor
+  (`SafetyPolicyTests.swift:130-136`, `Downloads/Tool.app` paketinin kendisi
+  `.denied(.insideAppBundle)`). Çöp kategorisi `~/.Trash`'in doğrudan
+  çocuklarını listeliyor (`CleanupCatalog.swift:157`) ve tarayıcı
+  `policy.evaluate` reddettiği öğeyi `items`'a değil `skipped`'e koyuyor
+  (`CleanupScanner.swift:70-73`). Sonuç: Çöp'teki `Foo.app` kartın
+  toplamına girmiyor, listede görünmüyor, "Çöpü boşalt" onu silmiyor. Aynı
+  neden `~/Downloads/Tool.app` için de geçerli ("Eski indirmeler"). Senaryo:
+  kullanıcı Uygulamalar'dan 3 GB'lık bir uygulamayı kaldırıyor, Temizlik'te
+  Çöp Kutusu'nu seçip boşaltıyor; kart "temiz" görünüyor, Finder'da uygulama
+  hâlâ Çöp'te ve yer açılmamış. Ekranda yalnızca temizlik sonrası "N öğe
+  atlandı (…güvenlik kuralı izin vermedi)" geçebilir (`CleanupView.swift:431`),
+  taramada hiçbir uyarı yok. Güvenlik açısından tarafı güvenli (fazla
+  koruyor, fazla silmiyor), yani bu bir koruma deliği değil işlev hatası.
+  Ama §2.2 "gösterilen şey gerçekle uyuşmalı" ruhuna ve "önce göster"
+  ilkesine ters: kullanıcı boşaldığını sanıyor. Çözüm yönü, ikisi mahkemede
+  tartışılsın: (a) `isInsideAppBundle` yalnızca yolun *üst* bileşenlerine
+  baksın (paketin kendisi `~/Downloads` ve `.Trash` içinde izinli), ya da
+  (b) Çöp kategorisi için ayrı, daha dar bir kural; hangisi olursa olsun
+  "paket Çöp'te, silinebilir" ve "Çöp dışında paket hâlâ reddedilir" testleri
+  Linux'ta yazılır. Not: `Uninstaller` kendi `UninstallPolicy`'sini
+  kullandığı için uygulama kaldırma bundan etkilenmiyor. Mahkeme gerekir
+  (`SafetyPolicy`, kalıcı silme). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Safety/SafetyPolicy.swift:75-77,131-141`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCatalog.swift:148-159`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupScanner.swift:70-73`,
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:70-74`,
+  `Packages/KeelCore/Tests/KeelCoreTests/SafetyPolicyTests.swift:130-136`)
+- Temizlik yürütücüsü, onaylanan öğenin tarama anındaki öğe olduğunu doğrulamıyor;
+  yalnızca aynı yolda bir şey olup olmadığına ve `SafetyPolicy`'ye bakıyor.
+  `CleanupExecutor.perform` öğe başına owner, `policy.evaluate` ve (kalıcı
+  silmede) Çöp içinde olma kontrolü yapıyor (satır 65-79); boyut, değişiklik
+  tarihi ya da yaş yeniden bakılmıyor. `CleanupModel.cleanAndWait` da
+  eşlemeyi yalnızca yolla yapıyor (`$0.id` = `url.path`, satır 140-141).
+  Tarama sonuçları kendiliğinden eskimiyor: Temizlik ekranında yalnızca elle
+  "Yeniden tara" var (`CleanupView.swift:133`), otomatik yenileme yok
+  (`lastScan` yalnızca Keel AI'da 10 dk eşiğiyle kullanılıyor,
+  `AccountSession.swift:295`). Senaryo: tarama sabah yapılır, "Günlük
+  dosyaları" listesine 8 günlük `app.log` girer; öğleden sonra uygulama aynı
+  adı yeniden yazar ve dosya artık taze. Akşam onayda aynı yol Çöp'e gider.
+  "Eski indirmeler"de aynı yolun üstüne yazılmış (yeniden indirilmiş) dosya
+  için de aynı. En ağır sonuç Çöp kategorisinde: `.deletePermanently` geri
+  alınamaz ve kullanıcı yalnızca taramadaki öğeleri onaylamış oluyor, yani
+  §2.2 "yalnızca seçilen öğeler" ve §2.1'in "kalıcı silme yalnızca kullanıcı
+  istediğinde" ruhu burada yolun kimliğine bağlı. Çöp'te Finder'ın aynı adı
+  yeniden kullanıp kullanmadığı (genelde "ad 2" ekler) Mac'te doğrulanmadı,
+  yani Çöp senaryosu varsayım; günlük/indirme senaryosu kod yolundan
+  çıkarıldı. Test yok: `CleanupExecutorTests.swift:56-67` yalnızca klasörün
+  link'le değiştirilmesini deniyor, içeriğin/tarihin değişmesini denemiyor.
+  Çözüm yönü: `CleanupItem`'a tarama anındaki değişiklik tarihini (ve gerekirse
+  `st_ino`) ekleyip `perform`'da eşleşmeyeni `.changedSinceScan` olarak atlamak
+  (özellikle `.deletePermanently` ve yaş kuralı olan kategorilerde); Linux'ta
+  "tarama sonrası dosya yeniden yazıldı → atlanır" testi. Mahkeme gerekir
+  (silme akışı). (Kaynak:
+  `Packages/KeelCore/Sources/KeelCore/Actions/CleanupExecutor.swift:65-79`,
+  `Packages/KeelCore/Sources/KeelCore/Cleanup/CleanupCategory.swift:36-55`,
+  `App/Features/Cleanup/CleanupModel.swift:137-150`,
+  `App/Features/Cleanup/CleanupView.swift:133`,
+  `Packages/KeelCore/Tests/KeelCoreTests/CleanupExecutorTests.swift:56-67`)
