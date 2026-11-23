@@ -150,6 +150,35 @@ struct ProgressBar: View {
     }
 }
 
+/// Bars over a faint track, so the chart reads even when values are low.
+struct Sparkline: View {
+    let values: [Double]
+    /// The value that fills a bar; nil scales to the largest value shown.
+    var maxValue: Double? = 1
+    var tint: Color = Palette.keelGreen
+    var height: CGFloat = 56
+
+    var body: some View {
+        let padded = Array(repeating: 0.0, count: max(SystemStatus.historyLength - values.count, 0)) + values
+        let scale = maxValue ?? max(padded.max() ?? 0, 1)
+        GeometryReader { proxy in
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(Array(padded.enumerated()), id: \.offset) { index, value in
+                    ZStack(alignment: .bottom) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(Palette.track.opacity(0.6))
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(index == padded.count - 1 ? tint : tint.opacity(0.45))
+                            .frame(height: max(2, proxy.size.height * min(value / scale, 1)))
+                    }
+                }
+            }
+        }
+        .frame(height: height)
+        .accessibilityHidden(true)
+    }
+}
+
 /// A byte count as the design sets it: the number in JetBrains Mono, the unit
 /// in Manrope, so monospaced spacing does not leave a wide gap before "GB".
 struct ByteAmount: View {

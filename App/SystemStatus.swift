@@ -194,7 +194,7 @@ final class SystemStatus {
     }
 
     private static func appending(_ value: Double, to history: [Double]) -> [Double] {
-        Array((history + [value]).suffix(historyLength))
+        RollingHistory.appending(value, to: history, limit: historyLength)
     }
 }
 

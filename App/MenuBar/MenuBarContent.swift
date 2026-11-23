@@ -6,6 +6,9 @@ struct MenuBarContent: View {
     @Environment(SystemStatus.self) private var status
     @Environment(\.openWindow) private var openWindow
 
+    private static let networkInColor = Color(hex: 0x4FD8F5)
+    private static let networkOutColor = Color(hex: 0xA08BFF)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
@@ -15,10 +18,16 @@ struct MenuBarContent: View {
                     .foregroundStyle(Palette.text)
             }
 
-            StatRow(title: "İşlemci", fraction: status.cpuUsage) {
-                Text(status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—")
-                    .font(.keelMono(13, .semibold))
-                    .foregroundStyle(Palette.text)
+            VStack(alignment: .leading, spacing: 6) {
+                StatRow(title: "İşlemci", fraction: status.cpuUsage) {
+                    Text(status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—")
+                        .font(.keelMono(13, .semibold))
+                        .foregroundStyle(Palette.text)
+                }
+                Sparkline(values: status.cpuHistory, height: 20)
+                Text("son 1 dk")
+                    .font(.keel(10, .medium))
+                    .foregroundStyle(Palette.slate)
             }
             StatRow(title: "Bellek", fraction: status.memory?.usedFraction) {
                 ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 13, base: .binary)
@@ -41,14 +50,25 @@ struct MenuBarContent: View {
                 .accessibilityElement(children: .combine)
             }
 
-            HStack(spacing: 4) {
-                Text("Ağ").eyebrowStyle()
-                Spacer()
-                Text(networkText)
-                    .font(.keelMono(12, .semibold))
-                    .foregroundStyle(Palette.text)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text("Ağ").eyebrowStyle()
+                    Spacer()
+                    Text(networkText)
+                        .font(.keelMono(12, .semibold))
+                        .foregroundStyle(Palette.text)
+                }
+                .accessibilityElement(children: .combine)
+
+                let networkScale = max((status.networkInHistory + status.networkOutHistory).max() ?? 0, 1)
+                VStack(spacing: 3) {
+                    Sparkline(values: status.networkInHistory, maxValue: networkScale, tint: Self.networkInColor, height: 16)
+                    Sparkline(values: status.networkOutHistory, maxValue: networkScale, tint: Self.networkOutColor, height: 16)
+                }
+                Text("son 1 dk")
+                    .font(.keel(10, .medium))
+                    .foregroundStyle(Palette.slate)
             }
-            .accessibilityElement(children: .combine)
 
             Divider()
 
