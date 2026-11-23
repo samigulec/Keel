@@ -1,4 +1,5 @@
 import Foundation
+import KeelCore
 
 /// A conversation as kept on disk: the words only. Tool runs and cleanup
 /// cards belong to the moment and are not saved.
@@ -77,15 +78,15 @@ enum ChatStore {
 
     /// The earlier conversation, for a model that did not see it, newest
     /// messages kept when it is long.
-    static func transcript(_ messages: [SavedChat.Message], maxCharacters: Int = 6_000) -> String {
-        var lines: [String] = []
-        var length = 0
-        for message in messages.reversed() where message.role != .notice {
-            let line = (message.role == .user ? "User: " : "Keel AI: ") + message.text
-            if length + line.count > maxCharacters { break }
-            lines.insert(line, at: 0)
-            length += line.count
+    static func transcript(_ messages: [SavedChat.Message], maxCharacters: Int = ChatTranscript.defaultMaxCharacters) -> String {
+        let mapped = messages.map { message -> ChatTranscript.Message in
+            let role: ChatTranscript.Message.Role = switch message.role {
+            case .user: .user
+            case .assistant: .assistant
+            case .notice: .notice
+            }
+            return ChatTranscript.Message(role: role, text: message.text)
         }
-        return lines.joined(separator: "\n\n")
+        return ChatTranscript.build(mapped, maxCharacters: maxCharacters)
     }
 }
