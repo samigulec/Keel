@@ -168,12 +168,9 @@ enum ActionProposals {
     static func apply(_ proposal: ActionProposal, performance: PerformanceModel) async -> ActionResult {
         switch proposal.kind {
         case .startup(let items, let enable):
-            let problems = await performance.setLaunchItems(items, enabled: enable)
-            let changed = items.count - problems.count
-            guard problems.isEmpty else {
-                return ActionResult(text: problems.joined(separator: "\n"), isError: true, canUndo: changed > 0)
-            }
-            return ActionResult(text: "\(items.count) servis \(enable ? "açıldı" : "kapatıldı").", isError: false, canUndo: true)
+            let outcome = await performance.setLaunchItems(items, enabled: enable)
+            let summary = outcome.applySummary(enabled: enable)
+            return ActionResult(text: summary.text, isError: summary.isError, canUndo: summary.canUndo)
 
         case .removeLoginItems(let items):
             var problems: [String] = []
@@ -216,11 +213,9 @@ enum ActionProposals {
     static func undo(_ proposal: ActionProposal, performance: PerformanceModel) async -> ActionResult {
         switch proposal.kind {
         case .startup(let items, let enable):
-            let problems = await performance.setLaunchItems(items, enabled: !enable)
-            return ActionResult(
-                text: problems.isEmpty ? "Geri alındı; servisler eski hâlinde." : problems.joined(separator: "\n"),
-                isError: !problems.isEmpty, canUndo: false, undone: problems.isEmpty
-            )
+            let outcome = await performance.setLaunchItems(items, enabled: !enable)
+            let summary = outcome.undoSummary()
+            return ActionResult(text: summary.text, isError: summary.isError, canUndo: summary.canUndo, undone: summary.undone)
         case .removeLoginItems(let items):
             for item in items { await performance.restoreLoginItem(item) }
             let missing = items.filter { !performance.loginItems.contains($0) }

@@ -111,6 +111,48 @@ struct StartupControlTests {
         #expect(LoginItemScript.add(items[2]) == nil)
         #expect(LoginItemScript.add(items[1])?.contains(#"path:"/Applications/Macs Fan Control.app""#) == true)
     }
+
+    @Test func switchOutcomeSeparatesLogProblemsFromServiceFailures() {
+        let userAgent = item("com.example.user", scope: .user)
+        let sysA = item("com.example.sys.a", scope: .system)
+        let sysB = item("com.example.sys.b", scope: .system)
+
+        // All switched, but log failed: still not an error, undo stays available.
+        let logOnly = LaunchSwitchOutcome(changed: [userAgent], serviceProblems: [], logProblem: "İşlem kaydı yazılamadı: disk dolu")
+        let logOnlyApply = logOnly.applySummary(enabled: false)
+        #expect(!logOnlyApply.isError)
+        #expect(logOnlyApply.canUndo)
+        #expect(logOnlyApply.text.contains("1 servis kapatıldı."))
+        #expect(logOnlyApply.text.contains("İşlem kaydı yazılamadı"))
+
+        let logOnlyUndo = logOnly.undoSummary()
+        #expect(!logOnlyUndo.isError)
+        #expect(logOnlyUndo.undone)
+        #expect(logOnlyUndo.text.contains("Geri alındı"))
+        #expect(logOnlyUndo.text.contains("İşlem kaydı yazılamadı"))
+
+        // Batch system cancellation: 1 message for 2 services, zero actually changed.
+        let cancelled = LaunchSwitchOutcome(
+            changed: [],
+            serviceProblems: ["Yönetici izni verilmedi; sistem servisleri olduğu gibi kaldı."],
+            logProblem: nil
+        )
+        let cancelledApply = cancelled.applySummary(enabled: false)
+        #expect(cancelledApply.isError)
+        #expect(!cancelledApply.canUndo)
+
+        // Mixed: 1 user agent switched, 2 system daemons cancelled.
+        let partial = LaunchSwitchOutcome(
+            changed: [userAgent],
+            serviceProblems: ["Yönetici izni verilmedi; sistem servisleri olduğu gibi kaldı."],
+            logProblem: nil
+        )
+        let partialApply = partial.applySummary(enabled: false)
+        #expect(partialApply.isError)
+        #expect(partialApply.canUndo)
+        #expect(partialApply.text.contains("1 servis kapatıldı."))
+        _ = (sysA, sysB)
+    }
 }
 
 @Suite("Fan control")

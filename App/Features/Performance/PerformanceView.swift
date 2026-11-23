@@ -777,6 +777,10 @@ private struct ProcessesCard: View {
                     }
                 }
             }
+            Text("Yalnızca senin kullanıcına ait süreçler görünür; kernel_task ve root süreçleri listelenmez.")
+                .font(.keel(11, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

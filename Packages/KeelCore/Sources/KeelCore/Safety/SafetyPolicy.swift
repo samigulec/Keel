@@ -46,12 +46,20 @@ public struct SafetyPolicy: Sendable {
         }
     }
 
+    public typealias DeviceIDProvider = @Sendable (_ path: String, _ followLinks: Bool) -> UInt64?
+
     public let allowedRoots: [String]
     public let protectedRoots: [String]
+    private let deviceIDProvider: DeviceIDProvider
 
-    public init(allowedRoots: [URL], protectedRoots: [URL]) {
+    public init(
+        allowedRoots: [URL],
+        protectedRoots: [URL],
+        deviceIDProvider: DeviceIDProvider? = nil
+    ) {
         self.allowedRoots = allowedRoots.map(Self.canonicalPath)
         self.protectedRoots = protectedRoots.map(Self.canonicalPath)
+        self.deviceIDProvider = deviceIDProvider ?? SafetyPolicy.deviceID
     }
 
     public func evaluate(_ url: URL) -> Verdict {
@@ -60,7 +68,7 @@ public struct SafetyPolicy: Sendable {
         let lexical = url.standardizedFileURL
         // lstat does not follow a trailing symlink, so a dangling link still
         // counts as existing (trashing it removes only the link).
-        guard let itemDevice = Self.deviceID(lexical.path, followLinks: false) else {
+        guard let itemDevice = deviceIDProvider(lexical.path, false) else {
             return .denied(.doesNotExist)
         }
 
@@ -91,7 +99,7 @@ public struct SafetyPolicy: Sendable {
         guard let root = matchingRoot else { return .denied(.outsideAllowedRoots) }
         if path == root { return .denied(.isAllowedRoot) }
 
-        guard Self.deviceID(root, followLinks: true) == itemDevice else {
+        guard deviceIDProvider(root, true) == itemDevice else {
             return .denied(.differentVolume)
         }
 

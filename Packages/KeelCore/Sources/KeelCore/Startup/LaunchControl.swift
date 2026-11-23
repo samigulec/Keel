@@ -60,6 +60,64 @@ public enum LaunchControl {
     }
 }
 
+/// Result of switching one or more background services. Service failures are
+/// kept separate from log-write errors so callers know accurately which
+/// services changed and whether undo applies.
+public struct LaunchSwitchOutcome: Equatable, Sendable {
+    public struct CardSummary: Equatable, Sendable {
+        public let text: String
+        public let isError: Bool
+        public let canUndo: Bool
+        public let undone: Bool
+
+        public init(text: String, isError: Bool, canUndo: Bool, undone: Bool = false) {
+            self.text = text
+            self.isError = isError
+            self.canUndo = canUndo
+            self.undone = undone
+        }
+    }
+
+    public var changed: [LaunchItem]
+    public var serviceProblems: [String]
+    public var logProblem: String?
+
+    public init(changed: [LaunchItem] = [], serviceProblems: [String] = [], logProblem: String? = nil) {
+        self.changed = changed
+        self.serviceProblems = serviceProblems
+        self.logProblem = logProblem
+    }
+
+    public var allProblems: [String] {
+        serviceProblems + (logProblem.map { [$0] } ?? [])
+    }
+
+    public var succeeded: Bool { serviceProblems.isEmpty }
+    public var canUndo: Bool { !changed.isEmpty }
+
+    public func applySummary(enabled: Bool) -> CardSummary {
+        let verb = enabled ? "açıldı" : "kapatıldı"
+        if serviceProblems.isEmpty {
+            let base = "\(changed.count) servis \(verb)."
+            let text = logProblem.map { "\(base)\n\($0)" } ?? base
+            return CardSummary(text: text, isError: false, canUndo: !changed.isEmpty)
+        }
+        var lines: [String] = []
+        if !changed.isEmpty { lines.append("\(changed.count) servis \(verb).") }
+        lines.append(contentsOf: allProblems)
+        return CardSummary(text: lines.joined(separator: "\n"), isError: true, canUndo: !changed.isEmpty)
+    }
+
+    public func undoSummary() -> CardSummary {
+        if serviceProblems.isEmpty {
+            let base = "Geri alındı; servisler eski hâlinde."
+            let text = logProblem.map { "\(base)\n\($0)" } ?? base
+            return CardSummary(text: text, isError: false, canUndo: false, undone: true)
+        }
+        return CardSummary(text: allProblems.joined(separator: "\n"), isError: true, canUndo: false, undone: false)
+    }
+}
+
 /// Quoting for commands handed to a shell or to AppleScript's `do shell script`.
 public enum ShellCommand {
     /// One shell word, whatever it contains.
