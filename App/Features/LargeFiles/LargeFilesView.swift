@@ -46,6 +46,7 @@ struct LargeFilesView: View {
                 .keelCard()
             default:
                 Tiles()
+                KindBreakdownBar()
                 Filters()
                 FileList()
                 if !model.selection.isEmpty {
@@ -97,18 +98,86 @@ private struct StartCard: View {
     let scan: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Henüz taranmadı")
-                .font(.keel(20, .extraBold))
-                .foregroundStyle(Palette.text)
-            Text("Tarama yalnızca okur. Masaüstü, Belgeler, İndirilenler gibi klasörlerindeki ve uygulamaların ~/Library'deki verilerindeki büyük dosyaları bulur. Apple'ın sistem verileri, Mail, Mesajlar, iCloud ve uygulamaların programları ile veritabanları listelenmez.")
-                .font(.keel(14, .medium))
-                .foregroundStyle(Palette.slate)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Taramayı başlat", action: scan)
-                .buttonStyle(.keelPrimary)
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(hex: 0xFB923C).opacity(0.24), .clear],
+                            center: .center,
+                            startRadius: 12,
+                            endRadius: 68
+                        )
+                    )
+                    .frame(width: 136, height: 136)
+                Mascot(character: .kutu, size: 70)
+            }
+            VStack(spacing: 6) {
+                Text("Büyük Dosyaları Keşfet")
+                    .font(.keel(22, .extraBold))
+                    .tracking(-0.4)
+                    .foregroundStyle(Palette.text)
+                Text("Tarama yalnızca okur. Masaüstü, Belgeler, İndirilenler ve uygulamaların ~/Library verilerindeki büyük dosyaları bulur. Apple'ın sistem verileri, Mail, Mesajlar ve iCloud listelenmez.")
+                    .font(.keel(13.5, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 520)
+            }
+            Button(action: scan) {
+                Label("Taramayı Başlat", systemImage: "magnifyingglass")
+            }
+            .buttonStyle(.keelHeroPill(colors: [Color(hex: 0xFB923C), Color(hex: 0xE11D48)]))
+            .padding(.top, 4)
         }
-        .keelCard()
+        .padding(.vertical, 34)
+        .padding(.horizontal, 28)
+        .frame(maxWidth: .infinity)
+        .keelCard(padding: 0, radius: 22)
+    }
+}
+
+/// DaisyDisk-inspired visual storage distribution by file kind.
+private struct KindBreakdownBar: View {
+    @Environment(LargeFilesModel.self) private var model
+
+    var body: some View {
+        let grouped: [SegmentedBar.Segment] = LargeFile.Kind.allCases.compactMap { kind in
+            let bytes = model.files.filter { $0.kind == kind }.reduce(0) { $0 + $1.sizeBytes }
+            guard bytes > 0 else { return nil }
+            return SegmentedBar.Segment(
+                id: "\(kind)",
+                title: FileText.kind(kind),
+                value: bytes,
+                color: Self.color(for: kind)
+            )
+        }
+        .sorted { $0.value > $1.value }
+
+        if !grouped.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Dosya Türlerine Göre Dağılım").eyebrowStyle()
+                    Spacer()
+                    ByteAmount(bytes: model.totalBytes, size: 15)
+                }
+                SegmentedBar(segments: grouped, height: 11)
+            }
+            .keelCard(padding: 18, radius: 16)
+        }
+    }
+
+    private static func color(for kind: LargeFile.Kind) -> Color {
+        switch kind {
+        case .video: Color(hex: 0xFB7185)
+        case .archive: Color(hex: 0xA78BFA)
+        case .diskImage: Color(hex: 0x38BDF8)
+        case .installer: Color(hex: 0xFBBF24)
+        case .audio: Color(hex: 0x34D399)
+        case .image: Color(hex: 0xF472B6)
+        case .document: Color(hex: 0x60A5FA)
+        case .other: Color(hex: 0x94A3B8)
+        }
     }
 }
 
@@ -236,14 +305,16 @@ private struct FileList: View {
             }
         }
         .padding(.vertical, 6)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.borderHighlight) }
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
     }
 }
 
 private struct FileRow: View {
     @Environment(LargeFilesModel.self) private var model
     let file: LargeFile
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -300,8 +371,11 @@ private struct FileRow: View {
                 .fixedSize()
                 .frame(minWidth: 64, alignment: .trailing)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 18)
         .frame(minHeight: 56)
+        .background(isHovered ? Color.white.opacity(0.035) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 6)
+        .onHover { isHovered = $0 }
         .help(file.url.path)
     }
 

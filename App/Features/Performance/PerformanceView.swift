@@ -112,12 +112,13 @@ private struct PanelCard<Content: View>: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(fill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             if fill == Palette.card {
-                RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.borderHighlight)
+                RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.borderHighlight)
             }
         }
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
     }
 }
 
@@ -254,23 +255,23 @@ private struct SystemOverview: View {
             gpu = "\(count) çekirdek"
         }
         return FactList(items: [
-            ("Çip", info.chipName ?? info.modelIdentifier ?? "—", nil),
-            ("İşlemci", cores, nil),
-            ("GPU", gpu, nil),
-            ("Bellek", Format.memory(info.physicalMemoryBytes), nil),
-            ("Açık kalma", Format.uptime(status.uptime), nil),
-            ("Isı", thermal.0, thermal.1),
+            ("cpu", "Çip", info.chipName ?? info.modelIdentifier ?? "—", nil),
+            ("square.grid.3x3", "İşlemci", cores, nil),
+            ("sparkles.rectangle.stack", "GPU", gpu, nil),
+            ("memorychip", "Bellek", Format.memory(info.physicalMemoryBytes), nil),
+            ("clock", "Açık kalma", Format.uptime(status.uptime), nil),
+            ("thermometer.medium", "Isı", thermal.0, thermal.1),
         ])
     }
 }
 
 /// The overview facts, splittable into two lines on narrow windows.
 private struct FactList: View {
-    let items: [(String, String, Color?)]
+    let items: [(String, String, String, Color?)]
 
     var body: some View {
-        ForEach(items, id: \.0) { item in
-            Fact(title: item.0, value: item.1, valueColor: item.2)
+        ForEach(items, id: \.1) { item in
+            Fact(symbol: item.0, title: item.1, value: item.2, valueColor: item.3)
         }
     }
 
@@ -279,18 +280,26 @@ private struct FactList: View {
 }
 
 private struct Fact: View {
+    let symbol: String
     let title: String
     let value: String
     var valueColor: Color?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).eyebrowStyle(color: Palette.Sidebar.eyebrow)
-            Text(value)
-                .font(.keel(15, .bold))
-                .foregroundStyle(valueColor.map { $0 == Palette.mintText ? Palette.keelGreen : $0 } ?? .white)
-                .lineLimit(1)
-                .fixedSize()
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(valueColor ?? Palette.Sidebar.eyebrow)
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).eyebrowStyle(color: Palette.Sidebar.eyebrow)
+                Text(value)
+                    .font(.keel(14.5, .bold))
+                    .foregroundStyle(valueColor.map { $0 == Palette.mintText ? Palette.keelGreen : $0 } ?? .white)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -304,13 +313,24 @@ private struct CPULiveCard: View {
     var body: some View {
         PanelCard {
             let usage = status.cpuUsage
+            let tint = (usage ?? 0) > 0.8 ? Palette.warning : Palette.keelGreen
             CardTitle(
                 title: "İşlemci",
                 status: usage.map { $0 > 0.8 ? "Yoğun" : "Normal" },
                 statusColor: (usage ?? 0) > 0.8 ? Palette.warningText : Palette.mintText
             )
-            BigNumber(text: usage.map(Format.percent) ?? "—")
-            Sparkline(values: status.cpuHistory)
+            HStack(alignment: .center, spacing: 14) {
+                BigNumber(text: usage.map(Format.percent) ?? "—")
+                Spacer()
+                CircularGauge(
+                    fraction: usage ?? 0,
+                    tint: tint,
+                    secondaryTint: Palette.info,
+                    lineWidth: 5.5,
+                    size: 48
+                )
+            }
+            Sparkline(values: status.cpuHistory, tint: tint)
             HStack {
                 if let split = status.cpuSplit {
                     Text("Kullanıcı \(Format.percent(split.user)) · Sistem \(Format.percent(split.system))")
@@ -334,7 +354,17 @@ private struct GPULiveCard: View {
     var body: some View {
         PanelCard {
             CardTitle(title: "GPU", status: gpu?.name)
-            BigNumber(text: gpu.map { Format.percent($0.utilization) } ?? "—")
+            HStack(alignment: .center, spacing: 14) {
+                BigNumber(text: gpu.map { Format.percent($0.utilization) } ?? "—")
+                Spacer()
+                CircularGauge(
+                    fraction: gpu?.utilization ?? 0,
+                    tint: Color(hex: 0x4C8DF6),
+                    secondaryTint: Color(hex: 0x818CF8),
+                    lineWidth: 5.5,
+                    size: 48
+                )
+            }
             Sparkline(values: history, tint: Color(hex: 0x4C8DF6))
             Text(detail)
                 .font(.keel(12, .semibold))
@@ -355,14 +385,30 @@ private struct MemoryLiveCard: View {
     var body: some View {
         PanelCard {
             let pressure = memory.map { Format.pressure($0.pressure) }
+            let ringTint: Color = switch memory?.pressure {
+            case .critical: Palette.danger
+            case .warning: Palette.warning
+            default: Palette.keelGreen
+            }
             CardTitle(title: "Bellek", status: pressure?.0, statusColor: pressure?.1 ?? Palette.mintText)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                ByteAmount(bytes: memory.map { Int64($0.usedBytes) }, size: 30, base: .binary)
-                if let memory {
-                    Text("/ \(Format.memory(memory.totalBytes))")
-                        .font(.keel(14, .semibold))
-                        .foregroundStyle(Palette.slate)
+            HStack(alignment: .center, spacing: 14) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    ByteAmount(bytes: memory.map { Int64($0.usedBytes) }, size: 30, base: .binary)
+                    if let memory {
+                        Text("/ \(Format.memory(memory.totalBytes))")
+                            .font(.keel(14, .semibold))
+                            .foregroundStyle(Palette.slate)
+                    }
                 }
+                Spacer()
+                CircularGauge(
+                    fraction: memory?.usedFraction ?? 0,
+                    tint: ringTint,
+                    secondaryTint: Palette.info,
+                    lineWidth: 5.5,
+                    size: 48,
+                    centerText: memory.map { "%\(Int(($0.usedFraction * 100).rounded()))" }
+                )
             }
             MemoryBar(memory: memory)
             Text(swapText)
@@ -832,13 +878,28 @@ private struct StorageCard: View {
     var body: some View {
         PanelCard {
             CardTitle(title: "SSD", status: device.map { $0.isInternal ? "Dahili" : "Harici" })
-            Text(device?.model ?? "Başlangıç diski")
-                .font(.keel(18, .extraBold))
-                .foregroundStyle(Palette.text)
-            if let interconnect = device?.interconnect {
-                Text("Bağlantı: \(interconnect)")
-                    .font(.keel(13, .medium))
-                    .foregroundStyle(Palette.slate)
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(device?.model ?? "Başlangıç diski")
+                        .font(.keel(18, .extraBold))
+                        .foregroundStyle(Palette.text)
+                    if let interconnect = device?.interconnect {
+                        Text("Bağlantı: \(interconnect)")
+                            .font(.keel(12.5, .medium))
+                            .foregroundStyle(Palette.slate)
+                    }
+                }
+                Spacer()
+                if let disk {
+                    CircularGauge(
+                        fraction: disk.usedFraction,
+                        tint: disk.usedFraction > 0.9 ? Palette.warning : Palette.keelGreen,
+                        secondaryTint: Palette.info,
+                        lineWidth: 5.5,
+                        size: 52,
+                        centerText: "%\(Int((disk.usedFraction * 100).rounded()))"
+                    )
+                }
             }
             if let disk {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -865,7 +926,17 @@ private struct BatteryCard: View {
     var body: some View {
         PanelCard {
             CardTitle(title: "Pil", status: state)
-            BigNumber(text: Format.percent(battery.charge))
+            HStack(alignment: .center, spacing: 14) {
+                BigNumber(text: Format.percent(battery.charge))
+                Spacer()
+                CircularGauge(
+                    fraction: battery.charge,
+                    tint: battery.charge < 0.2 ? Palette.warning : Palette.keelGreen,
+                    secondaryTint: Palette.info,
+                    lineWidth: 5.5,
+                    size: 52
+                )
+            }
             ProgressBar(fraction: battery.charge, tint: battery.charge < 0.2 ? Palette.warning : Palette.keelGreen)
             VStack(spacing: 10) {
                 if let health = battery.health {

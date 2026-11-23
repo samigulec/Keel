@@ -163,8 +163,9 @@ private struct HeavyAppsCard: View {
                 .padding(.vertical, 10)
         }
         .padding(.bottom, 8)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.borderHighlight) }
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
     }
 }
 

@@ -1,15 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// Raycast/Linear-style keyboard command palette (⌘K) for jumping to any section
-/// or running safe, read-only navigation and scan triggers in milliseconds.
+/// Spotlight / Raycast-style keyboard command palette (⌘K) with native macOS vibrancy.
 struct CommandPalette: View {
     struct Command: Identifiable {
         let id: String
         let title: String
         let subtitle: String
         let symbol: String
-        let tint: Color
+        let colors: [Color]
         let shortcut: String?
         let run: @MainActor () -> Void
     }
@@ -32,7 +31,7 @@ struct CommandPalette: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            Color.black.opacity(0.52)
                 .ignoresSafeArea()
                 .onTapGesture { dismiss() }
 
@@ -50,7 +49,7 @@ struct CommandPalette: View {
                     ShortcutCap(text: "ESC")
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 50)
+                .frame(height: 52)
 
                 Divider().overlay(Palette.divider)
 
@@ -61,7 +60,7 @@ struct CommandPalette: View {
                         .frame(maxWidth: .infinity, minHeight: 88)
                 } else {
                     ScrollView {
-                        VStack(spacing: 2) {
+                        VStack(spacing: 3) {
                             ForEach(Array(filtered.enumerated()), id: \.element.id) { index, command in
                                 PaletteRow(command: command, isSelected: index == selectedIndex) {
                                     dismiss()
@@ -71,16 +70,22 @@ struct CommandPalette: View {
                         }
                         .padding(8)
                     }
-                    .frame(maxHeight: 340)
+                    .frame(maxHeight: 350)
                 }
             }
-            .frame(width: 520)
-            .background(Palette.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(width: 530)
+            .background {
+                ZStack {
+                    VisualEffectBackground(material: .hudWindow, blendingMode: .withinWindow)
+                    Color(hex: 0x0E1522).opacity(0.82)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(Palette.borderHighlight, lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.55), radius: 34, y: 18)
+            .shadow(color: .black.opacity(0.58), radius: 36, y: 18)
             .padding(.bottom, 80)
         }
         .onAppear { searchFocused = true }
@@ -114,16 +119,16 @@ private struct PaletteRow: View {
     @State private var isHovered = false
 
     var body: some View {
+        let accent = command.colors.first ?? Palette.keelGreen
         Button(action: action) {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(command.tint.opacity(0.16))
-                    Image(systemName: command.symbol)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(command.tint)
-                }
-                .frame(width: 28, height: 28)
+                IconMedallion(
+                    symbol: command.symbol,
+                    colors: command.colors,
+                    size: 28,
+                    symbolScale: 0.46,
+                    filled: isSelected || isHovered
+                )
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(command.title)
@@ -140,14 +145,14 @@ private struct PaletteRow: View {
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: 42)
+            .frame(height: 44)
             .background(
-                isSelected ? Palette.Sidebar.selectedBackground : (isHovered ? Palette.mist : .clear),
+                isSelected ? accent.opacity(0.16) : (isHovered ? Palette.mist : .clear),
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isSelected ? Palette.Sidebar.selectedBorder : .clear, lineWidth: 1)
+                    .strokeBorder(isSelected ? accent.opacity(0.32) : .clear, lineWidth: 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }

@@ -36,9 +36,9 @@ struct Sidebar: View {
             .padding(.horizontal, 8)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 15) {
                     ForEach(Self.groups) { group in
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 3) {
                             if let title = group.title {
                                 Text(title)
                                     .font(.keel(10.5, .bold))
@@ -79,7 +79,12 @@ struct Sidebar: View {
         .padding(.top, 44) // clears traffic lights cleanly
         .padding(.bottom, 14)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Palette.Sidebar.background)
+        .background {
+            ZStack {
+                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                Palette.Sidebar.background
+            }
+        }
         .overlay(alignment: .trailing) {
             Rectangle().fill(Palette.divider).frame(width: 1)
         }
@@ -97,14 +102,13 @@ private struct SidebarItem: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isSelected ? section.accentColor.opacity(0.18) : Color.white.opacity(isHovered ? 0.08 : 0.04))
-                    Image(systemName: section.symbolName)
-                        .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(isSelected ? section.accentColor : (isHovered ? Palette.text : Palette.slate))
-                }
-                .frame(width: 26, height: 26)
+                IconMedallion(
+                    symbol: section.symbolName,
+                    colors: section.gradientColors,
+                    size: 25,
+                    symbolScale: 0.48,
+                    filled: isSelected || isHovered
+                )
 
                 Text(section.title)
                     .font(.keel(13.5, isSelected ? .bold : .semibold))
@@ -116,115 +120,118 @@ private struct SidebarItem: View {
                 if isHovered || isSelected {
                     Text("⌘\(shortcutNumber)")
                         .font(.keelMono(10, .medium))
-                        .foregroundStyle(isSelected ? Palette.mintText.opacity(0.8) : Palette.muted)
+                        .foregroundStyle(isSelected ? section.accentColor.opacity(0.9) : Palette.muted)
                 }
             }
             .padding(.horizontal, 8)
-            .frame(height: 36)
+            .frame(height: 38)
             .background(
-                isSelected ? Palette.Sidebar.selectedBackground : (isHovered ? Palette.Sidebar.hoverBackground : .clear),
+                isSelected
+                    ? AnyShapeStyle(
+                        LinearGradient(
+                            colors: [section.accentColor.opacity(0.18), Palette.Sidebar.selectedBackground],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    : AnyShapeStyle(isHovered ? Palette.Sidebar.hoverBackground : .clear),
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isSelected ? Palette.Sidebar.selectedBorder : .clear, lineWidth: 1)
-            }
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    Capsule()
-                        .fill(section.accentColor)
-                        .frame(width: 3, height: 16)
-                        .padding(.leading, 2)
-                }
+                    .strokeBorder(isSelected ? section.accentColor.opacity(0.32) : .clear, lineWidth: 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.14), value: isHovered)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
-/// Compact glanceable live system card at the bottom of the sidebar.
+/// Compact Sensei / CleanMyMac-style live system dock at the bottom of the sidebar.
 private struct SystemPulseWidget: View {
     let status: SystemStatus
     let openPerformance: () -> Void
     @State private var isHovered = false
 
     var body: some View {
+        let diskUsed = status.disk?.usedFraction ?? 0
+        let diskTint = diskUsed > 0.88 ? Palette.warning : Palette.keelGreen
         Button(action: openPerformance) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    metricChip(
-                        label: "CPU",
-                        value: status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—",
-                        tint: (status.cpuUsage ?? 0) > 0.8 ? Palette.warningText : Palette.mintText
-                    )
-                    metricChip(
-                        label: "RAM",
-                        value: status.memory.map { "%\(Int(($0.usedFraction * 100).rounded()))" } ?? "—",
-                        tint: status.memory?.pressure == .normal ? Palette.info : Palette.warningText
-                    )
-                }
+            HStack(spacing: 12) {
+                CircularGauge(
+                    fraction: diskUsed,
+                    tint: diskTint,
+                    secondaryTint: diskUsed > 0.88 ? Palette.danger : Palette.info,
+                    track: Palette.Sidebar.widgetTrack,
+                    lineWidth: 5,
+                    size: 46,
+                    centerText: status.disk.map { "%\(Int(($0.usedFraction * 100).rounded()))" } ?? "—",
+                    centerSubtitle: "SSD"
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text("Disk")
-                            .font(.keel(11.5, .semibold))
-                            .foregroundStyle(Palette.slate)
-                        Spacer()
+                            .font(.keel(10.5, .bold))
+                            .foregroundStyle(Palette.muted)
                         if let disk = status.disk {
                             Text("\(ByteFormat.string(disk.availableBytes)) boş")
-                                .font(.keelMono(11, .semibold))
+                                .font(.keelMono(12, .semibold))
                                 .foregroundStyle(Palette.text)
+                                .lineLimit(1)
                         } else {
-                            Text("—")
-                                .font(.keelMono(11, .semibold))
+                            Text("Ölçülüyor…")
+                                .font(.keel(11.5, .medium))
                                 .foregroundStyle(Palette.slate)
                         }
                     }
-                    ProgressBar(
-                        fraction: status.disk?.usedFraction ?? 0,
-                        tint: (status.disk?.usedFraction ?? 0) > 0.88 ? Palette.warning : nil,
-                        track: Palette.Sidebar.widgetTrack,
-                        height: 5
-                    )
+
+                    HStack(spacing: 8) {
+                        miniStat(
+                            label: "CPU",
+                            value: status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—",
+                            tint: (status.cpuUsage ?? 0) > 0.8 ? Palette.warningText : Palette.mintText
+                        )
+                        miniStat(
+                            label: "RAM",
+                            value: status.memory.map { "%\(Int(($0.usedFraction * 100).rounded()))" } ?? "—",
+                            tint: status.memory?.pressure == .normal ? Palette.info : Palette.warningText
+                        )
+                    }
                 }
+                Spacer(minLength: 0)
             }
-            .padding(12)
+            .padding(11)
             .background(
                 isHovered ? Palette.mistHover : Palette.Sidebar.widgetBackground,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(isHovered ? Color.white.opacity(0.14) : Palette.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(isHovered ? Color.white.opacity(0.16) : Palette.border, lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.14), value: isHovered)
         .help("Performans ekranını aç")
         .accessibilityElement(children: .combine)
     }
 
-    private func metricChip(label: String, value: String, tint: Color) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(tint).frame(width: 6, height: 6)
+    private func miniStat(label: String, value: String, tint: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(tint).frame(width: 5, height: 5)
             Text(label)
-                .font(.keel(10.5, .bold))
-                .foregroundStyle(Palette.slate)
-            Spacer(minLength: 2)
+                .font(.keel(10, .bold))
+                .foregroundStyle(Palette.muted)
             Text(value)
-                .font(.keelMono(11, .semibold))
-                .foregroundStyle(Palette.text)
+                .font(.keelMono(10.5, .semibold))
+                .foregroundStyle(Palette.subtle)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
@@ -235,8 +242,8 @@ private struct SettingsFooterButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(isHovered ? Palette.text : Palette.slate)
                 Text("Ayarlar")
                     .font(.keel(12.5, .semibold))

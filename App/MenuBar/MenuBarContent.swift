@@ -28,7 +28,33 @@ struct MenuBarContent: View {
                 }
             }
 
-            Divider().overlay(Palette.divider)
+            // iStat Menus / CleanMyMac Menu glanceable 3-ring strip
+            HStack(spacing: 0) {
+                ringStat(
+                    title: "CPU",
+                    fraction: status.cpuUsage ?? 0,
+                    label: status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—",
+                    tint: (status.cpuUsage ?? 0) > 0.8 ? Palette.warning : Palette.keelGreen
+                )
+                ringStat(
+                    title: "RAM",
+                    fraction: status.memory?.usedFraction ?? 0,
+                    label: status.memory.map { "%\(Int(($0.usedFraction * 100).rounded()))" } ?? "—",
+                    tint: status.memory?.pressure == .normal ? Palette.info : Palette.warning
+                )
+                ringStat(
+                    title: "Disk",
+                    fraction: status.disk?.usedFraction ?? 0,
+                    label: status.disk.map { "%\(Int(($0.usedFraction * 100).rounded()))" } ?? "—",
+                    tint: (status.disk?.usedFraction ?? 0) > 0.88 ? Palette.warning : Color(hex: 0xA78BFA)
+                )
+            }
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Palette.border, lineWidth: 1)
+            }
 
             VStack(alignment: .leading, spacing: 5) {
                 StatRow(title: "İşlemci", fraction: status.cpuUsage) {
@@ -41,6 +67,7 @@ struct MenuBarContent: View {
                     .font(.keel(10, .medium))
                     .foregroundStyle(Palette.muted)
             }
+
             StatRow(title: "Bellek", fraction: status.memory?.usedFraction) {
                 ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 12.5, base: .binary)
             }
@@ -98,8 +125,29 @@ struct MenuBarContent: View {
         }
         .padding(14)
         .frame(width: 260)
-        .background(Palette.raised)
+        .background {
+            ZStack {
+                VisualEffectBackground(material: .popover, blendingMode: .behindWindow)
+                Palette.raised.opacity(0.76)
+            }
+        }
         .preferredColorScheme(.dark)
+    }
+
+    private func ringStat(title: String, fraction: Double, label: String, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            CircularGauge(
+                fraction: fraction,
+                tint: tint,
+                lineWidth: 4.5,
+                size: 42,
+                centerText: label
+            )
+            Text(title)
+                .font(.keel(10, .bold))
+                .foregroundStyle(Palette.slate)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// "52 °C · 1.800 dev/dk"
@@ -124,13 +172,13 @@ private struct StatRow<Value: View>: View {
     @ViewBuilder var value: Value
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(title).eyebrowStyle()
                 Spacer()
                 value
             }
-            ProgressBar(fraction: fraction ?? 0, tint: Palette.keelGreen, height: 6)
+            ProgressBar(fraction: fraction ?? 0, tint: Palette.keelGreen, height: 5)
         }
         .accessibilityElement(children: .combine)
     }

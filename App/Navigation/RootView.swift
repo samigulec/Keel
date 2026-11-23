@@ -19,7 +19,7 @@ struct RootView: View {
         @Bindable var navigation = navigation
         HStack(spacing: 0) {
             Sidebar(selection: $navigation.selection)
-                .frame(width: 228)
+                .frame(width: 234)
 
             VStack(spacing: 0) {
                 TopUtilityBar(
@@ -41,11 +41,11 @@ struct RootView: View {
                         } else {
                             ScrollView {
                                 detail
-                                    .padding(.horizontal, 32)
-                                    .padding(.top, 22)
-                                    .padding(.bottom, 36)
+                                    .padding(.horizontal, 34)
+                                    .padding(.top, 24)
+                                    .padding(.bottom, 40)
                                     .frame(maxWidth: 1080, alignment: .leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .frame(maxWidth: .infinity, alignment: .center)
                             }
                         }
                     }
@@ -70,7 +70,10 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background { KeelBackground() }
+        .background {
+            KeelBackground(accent: navigation.selection.accentColor)
+                .animation(.easeInOut(duration: 0.45), value: navigation.selection)
+        }
         .overlay {
             if commandPaletteOpen {
                 CommandPalette(commands: paletteCommands) {
@@ -120,7 +123,7 @@ struct RootView: View {
                 title: section.title,
                 subtitle: sectionSubtitle(section),
                 symbol: section.symbolName,
-                tint: section.accentColor,
+                colors: section.gradientColors,
                 shortcut: "⌘\(index + 1)",
                 run: { navigation.selection = section }
             )
@@ -132,7 +135,7 @@ struct RootView: View {
                 title: "Akıllı Taramayı Başlat",
                 subtitle: "Alan, uygulamalar, büyük dosyalar ve sistem sağlığını tara",
                 symbol: "play.fill",
-                tint: Palette.keelGreen,
+                colors: [Color(hex: 0x34D399), Color(hex: 0x0D9488)],
                 shortcut: nil,
                 run: {
                     navigation.selection = .smartScan
@@ -144,7 +147,7 @@ struct RootView: View {
                 title: "Temizlik Taraması Yap",
                 subtitle: "Önbellek, günlük ve tarayıcı dosyalarını yeniden tara",
                 symbol: "arrow.clockwise",
-                tint: Palette.info,
+                colors: [Color(hex: 0x38BDF8), Color(hex: 0x2563EB)],
                 shortcut: nil,
                 run: {
                     navigation.selection = .cleanup
@@ -156,7 +159,7 @@ struct RootView: View {
                 title: companionOpen ? "Keel AI Panelini Kapat" : "Keel AI Panelini Aç",
                 subtitle: "Bulunduğun ekranın yanında yapay zeka paneli",
                 symbol: "wand.and.stars",
-                tint: Color(hex: 0xA78BFA),
+                colors: [Color(hex: 0xA78BFA), Color(hex: 0x6366F1)],
                 shortcut: "⌘J",
                 run: { toggleCompanion() }
             ),
@@ -164,8 +167,8 @@ struct RootView: View {
                 id: "act-settings",
                 title: "Ayarları Aç",
                 subtitle: "Başlangıç, menü çubuğu, fan yardımcısı ve gizlilik",
-                symbol: "gearshape",
-                tint: Palette.slate,
+                symbol: "gearshape.fill",
+                colors: [Color(hex: 0x64748B), Color(hex: 0x475569)],
                 shortcut: "⌘,",
                 run: { openSettings() }
             ),
@@ -174,7 +177,7 @@ struct RootView: View {
                 title: "Kayıt Klasörünü Finder'da Göster",
                 subtitle: "~/Library/Logs/Keel işlem kayıtları",
                 symbol: "doc.text.magnifyingglass",
-                tint: Palette.slate,
+                colors: [Color(hex: 0x64748B), Color(hex: 0x475569)],
                 shortcut: nil,
                 run: {
                     let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Keel", isDirectory: true)
@@ -218,7 +221,7 @@ struct RootView: View {
     }
 }
 
-/// Integrated desktop header bar replacing the floating bottom-right orb.
+/// Integrated translucent macOS utility header bar.
 private struct TopUtilityBar: View {
     let section: AppSection
     let companionOpen: Bool
@@ -233,12 +236,15 @@ private struct TopUtilityBar: View {
     var body: some View {
         HStack(spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: section.symbolName)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(section.accentColor)
+                IconMedallion(
+                    symbol: section.symbolName,
+                    colors: section.gradientColors,
+                    size: 20,
+                    symbolScale: 0.48
+                )
                 Text(section.title)
                     .font(.keel(13, .bold))
-                    .foregroundStyle(Palette.subtle)
+                    .foregroundStyle(Palette.text)
             }
 
             Spacer(minLength: 12)
@@ -255,7 +261,7 @@ private struct TopUtilityBar: View {
                     ShortcutCap(text: "⌘K")
                 }
                 .padding(.horizontal, 10)
-                .frame(width: 210, height: 28)
+                .frame(width: 214, height: 28)
                 .background(searchHovered ? Palette.mistHover : Palette.mist, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -286,7 +292,7 @@ private struct TopUtilityBar: View {
                     .frame(height: 28)
                     .background(
                         companionOpen
-                            ? Color(hex: 0x8B5CF6).opacity(0.20)
+                            ? Color(hex: 0x8B5CF6).opacity(0.22)
                             : (aiHovered ? Palette.mistHover : Palette.mist),
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                     )
@@ -308,7 +314,7 @@ private struct TopUtilityBar: View {
         }
         .padding(.horizontal, 24)
         .frame(height: 46)
-        .background(Color(hex: 0x0B1018).opacity(0.75))
+        .background(Color(hex: 0x0A0F18).opacity(0.55))
         .overlay(alignment: .bottom) {
             Rectangle().fill(Palette.divider).frame(height: 1)
         }
