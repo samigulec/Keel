@@ -124,4 +124,153 @@ struct LargeFilesTests {
         #expect(AppDataLocation(area: "Group Containers", owner: "group.com.docker").belongs(toAnyOf: ["com.docker"], names: []))
         #expect(!AppDataLocation(area: "Containers", owner: "com.docker.docker").belongs(toAnyOf: ["com.docker.cli"], names: ["docker desktop"]))
     }
+
+    @Test func removerRefusesHiddenPathsAndSymlinkToHiddenParent() throws {
+        let sandbox = try Sandbox()
+        let sshKey = try sandbox.write(".ssh/id_rsa", bytes: 50_000)
+        let gpgKey = try sandbox.write(".gnupg/secring.gpg", bytes: 50_000)
+        let nestedHidden = try sandbox.write("Documents/.secret/big.bin", bytes: 50_000)
+        let dotFile = try sandbox.write("Documents/.hidden_file", bytes: 50_000)
+        let secretTarget = try sandbox.write(".secret_dir/key.pem", bytes: 50_000)
+        _ = try sandbox.symlink("Documents/alias", to: sandbox.home.appendingPathComponent(".secret_dir"))
+        let viaSymlink = sandbox.home.appendingPathComponent("Documents/alias/key.pem")
+
+        let scanned = scanner(sandbox).scan()
+        #expect(scanned.isEmpty)
+
+        let log = ActionLog(fileURL: sandbox.home.appendingPathComponent("Library/Logs/Keel/actions.log"))
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let inputs = [sshKey, gpgKey, nestedHidden, dotFile, viaSymlink].map {
+            LargeFile(url: $0, sizeBytes: 50_000, lastActivity: nil, kind: .other)
+        }
+        let report = LargeFileRemover(home: sandbox.home, policy: LargeFileRemover.policy(home: sandbox.home), remover: remover, log: log)
+            .perform(inputs)
+
+        #expect(report.removed.isEmpty)
+        #expect(report.skipped.count == 5)
+        for url in [sshKey, gpgKey, nestedHidden, dotFile, secretTarget] {
+            #expect(FileManager.default.fileExists(atPath: url.path))
+        }
+        #expect(try log.entries().count == 5)
+        #expect(try log.entries().allSatisfy { $0.outcome == .skipped })
+    }
+
+    @Test func scannerAndRemoverProtectPackagesWhileAllowingRegularFilesAndDottedFolders() throws {
+        let sandbox = try Sandbox()
+        let blocked = [
+            try sandbox.write("Documents/Vacation.photoslibrary/originals/photo.raw", bytes: 60_000),
+            try sandbox.write("Documents/Notes.rtfd/attachment.bin", bytes: 60_000),
+            try sandbox.write("VMs/Win.vmwarevm/disk.vmdk", bytes: 60_000),
+            try sandbox.write("VMs/Lin.pvm/disk.hdd", bytes: 60_000),
+            try sandbox.write("Movies/Edit.fcpbundle/render.mov", bytes: 60_000),
+            try sandbox.write("Projects/App.xcodeproj/project.pbxproj", bytes: 60_000),
+            try sandbox.write("Documents/Novel.scriv/data.rtf", bytes: 60_000),
+            try sandbox.write("Design/Mock.sketch/page.json", bytes: 60_000),
+            try sandbox.write("Documents/Dummy.app/big.bin", bytes: 60_000),
+        ]
+        // Regular files with package-like extensions and ordinary dotted folders must NOT be rejected.
+        let allowedRegular = try sandbox.write("Downloads/DesignFile.sketch", bytes: 60_000)
+        let allowedDotted = try sandbox.write("Documents/Proje.v2/backup.zip", bytes: 60_000)
+
+        let scanned = scanner(sandbox).scan()
+        #expect(Set(scanned.map(\.url.lastPathComponent)) == ["DesignFile.sketch", "backup.zip"])
+
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let allInputs = (blocked + [allowedRegular, allowedDotted]).map {
+            LargeFile(url: $0, sizeBytes: 60_000, lastActivity: nil, kind: .other)
+        }
+        let report = LargeFileRemover(home: sandbox.home, policy: LargeFileRemover.policy(home: sandbox.home), remover: remover, log: nil)
+            .perform(allInputs)
+
+        #expect(Set(report.removed.map(\.url)) == [allowedRegular, allowedDotted])
+        #expect(report.skipped.count == blocked.count)
+        for url in blocked {
+            #expect(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
+    @Test func appDataOwnerExemptionProtectsRealBundlesAndNestedPackages() throws {
+        let sandbox = try Sandbox()
+        // Ordinary owner folder named like a bundle ID (no Info.plist): allowed.
+        let allowedOwnerData = try sandbox.write("Library/Caches/com.example.app/Contents/data.bin", bytes: 60_000)
+        let allowedDocker = try sandbox.write("Library/Containers/com.docker.docker/Data/vms/0/Docker.raw", bytes: 60_000)
+        // Genuine bundle sitting as an owner folder: rejected.
+        try sandbox.write("Library/Application Support/Real.app/Contents/Info.plist", bytes: 100)
+        let realAppInner = try sandbox.write("Library/Application Support/Real.app/Contents/big.bin", bytes: 60_000)
+        // Nested packages inside legitimate appData owner folders: rejected.
+        let nestedRtfd = try sandbox.write("Library/Application Support/MyApp/Sub.rtfd/big.bin", bytes: 60_000)
+        let nestedVm = try sandbox.write("Library/Application Support/MyApp/VM.vmwarevm/disk.vmdk", bytes: 60_000)
+        let nestedApp = try sandbox.write("Library/Caches/com.example.app/Helper.app/big.bin", bytes: 60_000)
+
+        let scanned = LargeFileScanner(home: sandbox.home, minimumBytes: 40_000, includeAppData: true, lastActivity: { _ in nil }).scan()
+        #expect(Set(scanned.map(\.url.lastPathComponent)) == ["data.bin", "Docker.raw"])
+
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let inputs = [allowedOwnerData, allowedDocker, realAppInner, nestedRtfd, nestedVm, nestedApp].map {
+            LargeFile(url: $0, sizeBytes: 60_000, lastActivity: nil, kind: .other, appData: LargeFileScanner.appDataLocation(of: $0, home: sandbox.home))
+        }
+        let report = LargeFileRemover(home: sandbox.home, policy: LargeFileRemover.policy(home: sandbox.home), remover: remover, log: nil)
+            .perform(inputs)
+
+        #expect(Set(report.removed.map(\.url)) == [allowedOwnerData, allowedDocker])
+        #expect(report.skipped.count == 4)
+        for url in [realAppInner, nestedRtfd, nestedVm, nestedApp] {
+            #expect(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
+    #if os(macOS)
+    @Test func macOSHiddenFlagIsRejectedExceptLibraryRootItself() throws {
+        let sandbox = try Sandbox()
+        var library = sandbox.home.appendingPathComponent("Library")
+        var values = URLResourceValues()
+        values.isHidden = true
+        try library.setResourceValues(values)
+
+        let vaultFile = try sandbox.write("Documents/Vault/big.bin", bytes: 60_000)
+        var vaultFolder = sandbox.home.appendingPathComponent("Documents/Vault")
+        try vaultFolder.setResourceValues(values)
+
+        var hiddenFile = try sandbox.write("Documents/hidden.bin", bytes: 60_000)
+        try hiddenFile.setResourceValues(values)
+
+        let hiddenSubFile = try sandbox.write("Library/Application Support/Steam/HiddenSub/big.bin", bytes: 60_000)
+        var hiddenSub = sandbox.home.appendingPathComponent("Library/Application Support/Steam/HiddenSub")
+        try hiddenSub.setResourceValues(values)
+
+        let steamAllowed = try sandbox.write("Library/Application Support/Steam/game.vpk", bytes: 60_000)
+
+        let scanned = LargeFileScanner(home: sandbox.home, minimumBytes: 40_000, includeAppData: true, lastActivity: { _ in nil }).scan()
+        #expect(scanned.map(\.url.lastPathComponent) == ["game.vpk"])
+
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let inputs = [vaultFile, hiddenFile, hiddenSubFile, steamAllowed].map {
+            LargeFile(url: $0, sizeBytes: 60_000, lastActivity: nil, kind: .other, appData: LargeFileScanner.appDataLocation(of: $0, home: sandbox.home))
+        }
+        let report = LargeFileRemover(home: sandbox.home, policy: LargeFileRemover.policy(home: sandbox.home), remover: remover, log: nil)
+            .perform(inputs)
+
+        #expect(report.removed.map(\.url) == [steamAllowed])
+        #expect(report.skipped.count == 3)
+        for url in [vaultFile, hiddenFile, hiddenSubFile] {
+            #expect(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+    #else
+    @Test func linuxFallbackDetectsCustomBundleWithInfoPlist() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("Documents/Custom.mybundle/Contents/Info.plist", bytes: 100)
+        let inner = try sandbox.write("Documents/Custom.mybundle/Contents/big.bin", bytes: 60_000)
+
+        #expect(scanner(sandbox).scan().isEmpty)
+
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let report = LargeFileRemover(home: sandbox.home, policy: LargeFileRemover.policy(home: sandbox.home), remover: remover, log: nil)
+            .perform([LargeFile(url: inner, sizeBytes: 60_000, lastActivity: nil, kind: .other)])
+
+        #expect(report.removed.isEmpty)
+        #expect(report.skipped.count == 1)
+        #expect(FileManager.default.fileExists(atPath: inner.path))
+    }
+    #endif
 }
