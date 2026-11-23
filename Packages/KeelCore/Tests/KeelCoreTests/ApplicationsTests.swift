@@ -202,4 +202,166 @@ struct ApplicationsTests {
 
         #expect(sandbox.uninstallPolicy().evaluateApp(app) == .denied("bir kısayol"))
     }
+
+    // MARK: LaunchAgent bootout
+
+    private func writeAgentPlist(in sandbox: Sandbox, name: String, label: String?) throws -> URL {
+        let agents = sandbox.home.appendingPathComponent("Library/LaunchAgents", isDirectory: true)
+        try FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
+        let url = agents.appendingPathComponent(name)
+        var dict: [String: Any] = ["RunAtLoad": true]
+        if let label { dict["Label"] = label }
+        let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
+        try data.write(to: url)
+        return url
+    }
+
+    @Test func bootsOutLaunchAgentsBeforeTrashingAppAndOtherFiles() throws {
+        let sandbox = try Sandbox()
+        let app = try #require(AppInventory.read(try sandbox.app("Applications/Editor.app", bundleID: "com.vendor.editor")))
+        let cache = try sandbox.write("Library/Caches/com.vendor.editor/huge.bin", bytes: 50_000)
+        let plist = try writeAgentPlist(in: sandbox, name: "com.vendor.editor.helper.plist", label: "com.vendor.editor.helper")
+
+        // Simulate ApplicationsModel's descending size sort: big cache first, tiny plist last.
+        let files = [
+            RelatedFile(url: cache.deletingLastPathComponent(), kind: .caches, sizeBytes: 50_000),
+            RelatedFile(url: plist, kind: .launchAgents, sizeBytes: 120),
+        ]
+
+        let lock = NSLock()
+        nonisolated(unsafe) var events: [String] = []
+        let policy = sandbox.uninstallPolicy()
+        let stopper = LaunchAgentStopper(
+            launchAgentsRoots: policy.launchAgentsRoots,
+            ownBundleIdentifier: "com.samigulec.Keel",
+            runner: { executable, arguments in
+                #expect(executable == URL(fileURLWithPath: "/bin/launchctl"))
+                #expect(arguments == ["bootout", "gui/501/com.vendor.editor.helper"])
+                #expect(!arguments.contains("disable"))
+                lock.withLock { events.append("bootout:\(arguments[1])") }
+                return .init(exitCode: 0)
+            },
+            userIDProvider: { 501 }
+        )
+
+        let remover = try RecordingRemover(bin: sandbox.outside.appendingPathComponent("bin"))
+        let log = ActionLog(fileURL: sandbox.home.appendingPathComponent("Library/Logs/Keel/actions.log"))
+        let report = Uninstaller(policy: policy, remover: remover, log: log, agentStopper: stopper)
+            .perform([UninstallPlan(app: app, removesApp: true, files: files, appSizeBytes: 1_000)])
+
+        #expect(report.failed.isEmpty && report.skipped.isEmpty)
+        #expect(events == ["bootout:gui/501/com.vendor.editor.helper"])
+        // LaunchAgent plist must be trashed first, then app bundle, then remaining files.
+        #expect(remover.trashed.map(\.lastPathComponent) == [
+            "com.vendor.editor.helper.plist",
+            "Editor.app",
+            "com.vendor.editor",
+        ])
+        let entries = try log.entries()
+        #expect(entries.first?.detail == "launchctl bootout com.vendor.editor.helper (exit 0)")
+    }
+
+    @Test func toleratesNotLoadedExitCodesAndFailsClosedOnOtherErrors() throws {
+        for tolerated: Int32 in [3, 113] {
+            let sandbox = try Sandbox()
+            let app = try #require(AppInventory.read(try sandbox.app("Applications/Editor.app", bundleID: "com.vendor.editor")))
+            let plist = try writeAgentPlist(in: sandbox, name: "com.vendor.editor.agent.plist", label: "com.vendor.editor.agent")
+            let policy = sandbox.uninstallPolicy()
+            let stopper = LaunchAgentStopper(
+                launchAgentsRoots: policy.launchAgentsRoots,
+                runner: { _, _ in .init(exitCode: tolerated) },
+                userIDProvider: { 501 }
+            )
+            let remover = try RecordingRemover(bin: sandbox.outside.appendingPathComponent("bin"))
+            // Reset flow (removesApp: false) stops & trashes agent while keeping app bundle.
+            let report = Uninstaller(policy: policy, remover: remover, log: nil, agentStopper: stopper)
+                .perform([UninstallPlan(app: app, removesApp: false, files: [RelatedFile(url: plist, kind: .launchAgents, sizeBytes: 100)], appSizeBytes: 1_000)])
+
+            #expect(report.failed.isEmpty)
+            #expect(remover.trashed.map(\.lastPathComponent) == ["com.vendor.editor.agent.plist"])
+            #expect(FileManager.default.fileExists(atPath: app.url.path))
+        }
+
+        // Non-tolerated exit code (e.g. 5) must fail closed: plist stays on disk and ActionLog records failure.
+        let sandbox = try Sandbox()
+        let app = try #require(AppInventory.read(try sandbox.app("Applications/Editor.app", bundleID: "com.vendor.editor")))
+        let plist = try writeAgentPlist(in: sandbox, name: "com.vendor.editor.stuck.plist", label: "com.vendor.editor.stuck")
+        let policy = sandbox.uninstallPolicy()
+        let stopper = LaunchAgentStopper(
+            launchAgentsRoots: policy.launchAgentsRoots,
+            runner: { _, _ in .init(exitCode: 5, output: "I/O error") },
+            userIDProvider: { 501 }
+        )
+        let remover = try RecordingRemover(bin: sandbox.outside.appendingPathComponent("bin"))
+        let log = ActionLog(fileURL: sandbox.home.appendingPathComponent("Library/Logs/Keel/actions.log"))
+        let report = Uninstaller(policy: policy, remover: remover, log: log, agentStopper: stopper)
+            .perform([UninstallPlan(app: app, removesApp: false, files: [RelatedFile(url: plist, kind: .launchAgents, sizeBytes: 100)], appSizeBytes: 1_000)])
+
+        #expect(report.removed.isEmpty)
+        #expect(report.failed.count == 1)
+        #expect(remover.trashed.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: plist.path))
+        let entries = try log.entries()
+        #expect(entries.count == 1 && entries[0].outcome == .failed)
+        #expect(entries[0].detail?.contains("exit 5") == true)
+    }
+
+    @Test func refusesUnsafeAppleKeelAndSymlinkLaunchAgentsInPolicyAndStopper() throws {
+        let sandbox = try Sandbox()
+        let agents = sandbox.home.appendingPathComponent("Library/LaunchAgents", isDirectory: true)
+        try FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
+
+        let appleUpper = try writeAgentPlist(in: sandbox, name: "COM.APPLE.helper.plist", label: "COM.APPLE.helper")
+        let keelOwn = try writeAgentPlist(in: sandbox, name: "com.samigulec.Keel.plist", label: "com.samigulec.Keel")
+        let keelSub = try writeAgentPlist(in: sandbox, name: "com.samigulec.Keel.fan.plist", label: "com.samigulec.Keel.fan")
+        let customOwn = try writeAgentPlist(in: sandbox, name: "org.custom.keel.helper.plist", label: "org.custom.keel.helper")
+        let emptyLabel = try writeAgentPlist(in: sandbox, name: "empty.plist", label: "")
+        let slashLabel = try writeAgentPlist(in: sandbox, name: "slash.plist", label: "bad/label")
+        let dotLabel = try writeAgentPlist(in: sandbox, name: "dot.plist", label: ".")
+        let dotDotLabel = try writeAgentPlist(in: sandbox, name: "dotdot.plist", label: "..")
+        let missingLabel = try writeAgentPlist(in: sandbox, name: "missing.plist", label: nil)
+        let badXML = agents.appendingPathComponent("corrupt.plist")
+        try Data("not a plist".utf8).write(to: badXML)
+        let nonPlist = agents.appendingPathComponent("notes.txt")
+        try Data("hello".utf8).write(to: nonPlist)
+        let dirPlist = agents.appendingPathComponent("folder.plist")
+        try FileManager.default.createDirectory(at: dirPlist, withIntermediateDirectories: true)
+        let outsidePlist = sandbox.outside.appendingPathComponent("real.plist")
+        try PropertyListSerialization.data(fromPropertyList: ["Label": "com.vendor.real"], format: .xml, options: 0).write(to: outsidePlist)
+        let symlinkPlist = try sandbox.symlink("Library/LaunchAgents/link.plist", to: outsidePlist)
+
+        let policy = UninstallPolicy(
+            appRoots: [sandbox.applications],
+            fileRoots: AppLeftoverFinder.locations.map { sandbox.home.appendingPathComponent($0.path, isDirectory: true) },
+            protectedRoots: SafetyPolicy.standardProtectedRoots(home: sandbox.home).filter { $0.path != "/Applications" },
+            ownBundle: nil,
+            ownBundleIdentifier: "org.custom.keel"
+        )
+
+        nonisolated(unsafe) var runnerCalls = 0
+        let stopper = LaunchAgentStopper(
+            launchAgentsRoots: policy.launchAgentsRoots,
+            ownBundleIdentifier: "org.custom.keel",
+            runner: { _, _ in
+                runnerCalls += 1
+                return .init(exitCode: 0)
+            },
+            userIDProvider: { 501 }
+        )
+
+        let unsafeURLs = [
+            appleUpper, keelOwn, keelSub, customOwn, emptyLabel,
+            slashLabel, dotLabel, dotDotLabel, missingLabel, badXML,
+            nonPlist, dirPlist, symlinkPlist,
+        ]
+        for url in unsafeURLs {
+            // Even when passed with a non-.launchAgents kind, canonical parent under Library/LaunchAgents triggers full checks.
+            let file = RelatedFile(url: url, kind: .preferences, sizeBytes: 10)
+            #expect(policy.evaluateFile(file) != .allowed, "policy should deny \(url.lastPathComponent)")
+            if case .success = stopper.stop(at: url) {
+                Issue.record("stopper should fail for \(url.lastPathComponent)")
+            }
+        }
+        #expect(runnerCalls == 0)
+    }
 }

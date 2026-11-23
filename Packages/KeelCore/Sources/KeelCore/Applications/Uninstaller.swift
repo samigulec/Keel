@@ -50,27 +50,48 @@ public struct UninstallPolicy: Sendable {
 
     public let appRoots: [String]
     public let fileRoots: [String]
+    public let launchAgentsRoots: [String]
     /// Keel itself, which must not remove its own bundle.
     public let ownBundle: String?
+    public let ownBundleIdentifier: String?
     let library: SafetyPolicy
 
-    public init(appRoots: [URL], fileRoots: [URL], protectedRoots: [URL], ownBundle: URL?) {
+    public init(
+        appRoots: [URL],
+        fileRoots: [URL],
+        protectedRoots: [URL],
+        ownBundle: URL?,
+        ownBundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) {
         self.appRoots = appRoots.map(SafetyPolicy.canonicalPath)
         self.fileRoots = fileRoots.map(SafetyPolicy.canonicalPath)
+        self.launchAgentsRoots = self.fileRoots.filter { root in
+            let parts = SafetyPolicy.components(of: root)
+            return parts.count >= 2 && Array(parts.suffix(2)) == ["Library", "LaunchAgents"]
+        }
         self.ownBundle = ownBundle.map(SafetyPolicy.canonicalPath)
+        self.ownBundleIdentifier = ownBundleIdentifier
         library = SafetyPolicy(allowedRoots: fileRoots, protectedRoots: protectedRoots)
     }
 
     public static func standard(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        ownBundle: URL? = Bundle.main.bundleURL
+        ownBundle: URL? = Bundle.main.bundleURL,
+        ownBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> UninstallPolicy {
         UninstallPolicy(
             appRoots: AppInventory.standardRoots(home: home),
             fileRoots: AppLeftoverFinder.locations.map { home.appendingPathComponent($0.path, isDirectory: true) },
             protectedRoots: SafetyPolicy.standardProtectedRoots(home: home).filter { $0.path != "/Applications" },
-            ownBundle: ownBundle
+            ownBundle: ownBundle,
+            ownBundleIdentifier: ownBundleIdentifier
         )
+    }
+
+    /// True when `url` sits directly inside one of `launchAgentsRoots`.
+    public func isLaunchAgent(_ url: URL) -> Bool {
+        let parent = SafetyPolicy.canonicalPath(url.standardizedFileURL.deletingLastPathComponent())
+        return launchAgentsRoots.contains(parent)
     }
 
     public func evaluateApp(_ app: InstalledApp) -> Verdict {
@@ -104,6 +125,15 @@ public struct UninstallPolicy: Sendable {
         // Only entries directly in a searched folder, never deeper.
         let parent = SafetyPolicy.canonicalPath(file.url.standardizedFileURL.deletingLastPathComponent())
         guard fileRoots.contains(parent) else { return .denied("arama klasörlerinin doğrudan içinde değil") }
+        if file.kind == .launchAgents || launchAgentsRoots.contains(parent) {
+            if case .denied(let reason) = LaunchAgentStopper.validate(
+                file.url,
+                launchAgentsRoots: launchAgentsRoots,
+                ownBundleIdentifier: ownBundleIdentifier
+            ) {
+                return .denied(reason)
+            }
+        }
         return .allowed
     }
 }
@@ -112,15 +142,27 @@ public struct Uninstaller: Sendable {
     public let policy: UninstallPolicy
     public let remover: any FileRemover
     public let log: ActionLog?
+    public let agentStopper: LaunchAgentStopper
 
-    public init(policy: UninstallPolicy, remover: any FileRemover, log: ActionLog?) {
+    public init(
+        policy: UninstallPolicy,
+        remover: any FileRemover,
+        log: ActionLog?,
+        agentStopper: LaunchAgentStopper? = nil
+    ) {
         self.policy = policy
         self.remover = remover
         self.log = log
+        self.agentStopper = agentStopper ?? LaunchAgentStopper(
+            launchAgentsRoots: policy.launchAgentsRoots,
+            ownBundleIdentifier: policy.ownBundleIdentifier
+        )
     }
 
     /// Removes each plan's app and files. A running app is left alone, and
-    /// so are its files, since it may be writing them.
+    /// so are its files, since it may be writing them. User LaunchAgents are
+    /// stopped via `launchctl bootout` and moved to the Trash before the app
+    /// bundle or any other files so a running agent cannot rewrite preferences.
     public func perform(_ plans: [UninstallPlan], runningBundleIDs: Set<String> = [], now: @Sendable () -> Date = Date.init) -> UninstallReport {
         var report = UninstallReport()
         let running = Set(runningBundleIDs.map { $0.lowercased() })
@@ -131,12 +173,23 @@ public struct Uninstaller: Sendable {
                 continue
             }
 
-            var targets: [(url: URL, bytes: Int64, verdict: UninstallPolicy.Verdict)] = plan.files.map {
-                ($0.url, $0.sizeBytes, policy.evaluateFile($0))
+            var agentTargets: [(url: URL, bytes: Int64, verdict: UninstallPolicy.Verdict, isLaunchAgent: Bool)] = []
+            var otherTargets: [(url: URL, bytes: Int64, verdict: UninstallPolicy.Verdict, isLaunchAgent: Bool)] = []
+            for file in plan.files {
+                let isAgent = file.kind == .launchAgents || policy.isLaunchAgent(file.url)
+                let entry = (file.url, file.sizeBytes, policy.evaluateFile(file), isAgent)
+                if isAgent {
+                    agentTargets.append(entry)
+                } else {
+                    otherTargets.append(entry)
+                }
             }
+
+            var targets = agentTargets
             if plan.removesApp {
-                targets.insert((plan.app.url, plan.appSizeBytes, policy.evaluateApp(plan.app)), at: 0)
+                targets.append((plan.app.url, plan.appSizeBytes, policy.evaluateApp(plan.app), false))
             }
+            targets.append(contentsOf: otherTargets)
 
             for target in targets {
                 func record(_ outcome: ActionLog.Entry.Outcome, _ detail: String? = nil) {
@@ -150,13 +203,24 @@ public struct Uninstaller: Sendable {
                     record(.skipped, reason)
                     continue
                 }
+                var stopDetail: String?
+                if target.isLaunchAgent {
+                    switch agentStopper.stop(at: target.url) {
+                    case .success(let outcome):
+                        stopDetail = outcome.logDetail
+                    case .failure(let error):
+                        report.failed.append(.init(url: target.url, message: error.message))
+                        record(.failed, error.logDetail)
+                        continue
+                    }
+                }
                 do {
                     if let landed = try remover.moveToTrash(target.url) {
                         report.trashed.append(TrashedItem(original: target.url, inTrash: landed, bytes: target.bytes))
                     }
                     report.removed.append(target.url)
                     report.freedBytes += target.bytes
-                    record(.removed)
+                    record(.removed, stopDetail)
                     if target.url == plan.app.url { report.removedApps.append(plan.app) }
                 } catch {
                     report.failed.append(.init(url: target.url, message: error.localizedDescription))

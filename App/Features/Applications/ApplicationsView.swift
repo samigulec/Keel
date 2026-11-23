@@ -105,6 +105,9 @@ struct ApplicationsView: View {
         } else {
             text += " Uygulama kalır; ayarları ve verileri ilk açılıştaki haline döner."
         }
+        if pending.contains(where: { $0.files.contains { $0.kind == .launchAgents } }) {
+            text += " Seçili arka plan görevleri taşınmadan önce durdurulur; geri alırsan dosya yerine döner ve görev bir sonraki oturumda başlar."
+        }
         return text
     }
 }
