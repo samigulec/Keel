@@ -41,7 +41,10 @@ Uygulamayı ileride public yapabilmemizin ön şartı. Her özellik bu kurallara
 7. **Her işlem kaydedilir.** `~/Library/Logs/Keel/` altında ne, ne zaman, ne
    kadar taşındı. Hata ayıklama ve güven için.
 8. **Root yetkisi MVP'de yok.** Yönetici yetkisi isteyen işler (helper) Faz 3'e
-   kadar ertelenir.
+   kadar ertelenir. *Geçici istisna (Sami onayı, 2026-11-23):* mevcut sistem
+   servisi aç/kapat ve isteğe bağlı fan yardımcısındaki `osascript` root yolu
+   geçici olarak kalır; Faz 3'te Developer ID imzalı `SMAppService` daemon +
+   XPC ile tamamen kaldırılır.
 
 ## 3. Tasarımdaki bazı noktalarda düzeltme önerisi
 
