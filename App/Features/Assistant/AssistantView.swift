@@ -211,10 +211,10 @@ struct Conversation: View {
                     }
                     Color.clear.frame(height: 1).id("end")
                 }
-                .padding(compact ? 16 : 24)
+                .padding(compact ? 14 : 20)
             }
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.borderHighlight) }
             .onChange(of: model.items.last?.text) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
             .onChange(of: model.items.count) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
         }

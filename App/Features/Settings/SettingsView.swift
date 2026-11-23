@@ -93,7 +93,7 @@ struct SettingsView: View {
 
             Section("Hakkında") {
                 LabeledContent("Sürüm", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
-                LabeledContent("Kısayollar", value: "⌘1–⌘7 bölümler · ⌘J Keel AI · ⌘, Ayarlar")
+                LabeledContent("Kısayollar", value: "⌘1–⌘7 bölümler · ⌘K Hızlı ara · ⌘J Keel AI · ⌘, Ayarlar")
             }
         }
         .formStyle(.grouped)

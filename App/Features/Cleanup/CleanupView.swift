@@ -9,7 +9,7 @@ struct CleanupView: View {
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .bottom) {
                 PageHeader(
                     title: "Temizlik",
@@ -49,15 +49,18 @@ struct CleanupView: View {
             case .scanning:
                 ScanningCard(cancel: model.cancelScan)
             case .ready, .cleaning:
+                if model.totalBytes > 0 {
+                    breakdownCard
+                }
                 if compact {
                     VStack(spacing: 20) {
                         categoryList
                         summary
                     }
                 } else {
-                    HStack(alignment: .top, spacing: 24) {
+                    HStack(alignment: .top, spacing: 22) {
                         categoryList
-                        summary.frame(width: 300)
+                        summary.frame(width: 304)
                     }
                 }
             }
@@ -70,6 +73,28 @@ struct CleanupView: View {
         } message: {
             Text(confirmationMessage)
         }
+    }
+
+    // MARK: - Storage Breakdown (DaisyDisk / macOS Storage style)
+
+    private var breakdownCard: some View {
+        let segments = model.results.map { result in
+            SegmentedBar.Segment(
+                id: result.category.id.rawValue,
+                title: result.category.title,
+                value: result.totalBytes,
+                color: CategoryStyle.color(for: result.category.id)
+            )
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Temizlenebilir Alan Dağılımı").eyebrowStyle()
+                Spacer()
+                ByteAmount(bytes: model.totalBytes, size: 15, color: Palette.text)
+            }
+            SegmentedBar(segments: segments, height: 11)
+        }
+        .keelCard(padding: 18, radius: 16)
     }
 
     // MARK: - List
@@ -92,30 +117,49 @@ struct CleanupView: View {
                 }
             }
         }
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.borderHighlight) }
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
         .disabled(model.phase == .cleaning)
     }
 
     // MARK: - Summary
 
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Seçilen").eyebrowStyle(color: Palette.Sidebar.eyebrow)
-            ByteAmount(bytes: model.selectedBytes, size: 44, color: .white)
-            Text("\(model.selectedResults.count) kategori seçili")
-                .font(.keel(14, .medium))
-                .foregroundStyle(Palette.Sidebar.text)
-            ProgressBar(
-                fraction: model.totalBytes > 0 ? Double(model.selectedBytes) / Double(model.totalBytes) : 0,
-                track: Palette.Sidebar.widgetTrack,
-                height: 10
-            )
+        let ratio = model.totalBytes > 0 ? Double(model.selectedBytes) / Double(model.totalBytes) : 0
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                CircularGauge(
+                    fraction: ratio,
+                    tint: Palette.keelGreen,
+                    secondaryTint: Palette.info,
+                    track: Palette.Sidebar.widgetTrack,
+                    lineWidth: 6.5,
+                    size: 64,
+                    centerText: "%\(Int((ratio * 100).rounded()))"
+                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Seçilen").eyebrowStyle(color: Palette.Sidebar.eyebrow)
+                    ByteAmount(bytes: model.selectedBytes, size: 28, color: .white)
+                    Text("\(model.selectedResults.count) kategori seçili")
+                        .font(.keel(12.5, .medium))
+                        .foregroundStyle(Palette.Sidebar.text)
+                }
+            }
+
             if let disk = status.disk {
-                Text("Temizlik sonrası boş alan yaklaşık **\(ByteFormat.string(disk.availableBytes + model.selectedBytes))** olacak.")
-                    .font(.keel(13, .medium))
-                    .foregroundStyle(Palette.Sidebar.text)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Image(systemName: "externaldrive.badge.checkmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Palette.mintText)
+                    Text("Temizlik sonrası boş alan yaklaşık **\(ByteFormat.string(disk.availableBytes + model.selectedBytes))** olacak.")
+                        .font(.keel(12.5, .medium))
+                        .foregroundStyle(Palette.Sidebar.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             Button {
@@ -124,7 +168,7 @@ struct CleanupView: View {
                 if model.phase == .cleaning {
                     ProgressView().controlSize(.small).tint(Palette.onAccent)
                 } else {
-                    Text("Temizle")
+                    Label("Temizle", systemImage: "sparkles")
                 }
             }
             .buttonStyle(.keelAccent)
@@ -132,12 +176,12 @@ struct CleanupView: View {
 
             Button("Yeniden tara", action: model.scan)
                 .buttonStyle(.plain)
-                .font(.keel(14, .bold))
+                .font(.keel(13, .bold))
                 .foregroundStyle(Palette.Sidebar.eyebrow)
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 32)
                 .disabled(model.isBusy)
         }
-        .keelSummaryCard(padding: 28, radius: 24)
+        .keelSummaryCard(padding: 22, radius: 18)
     }
 
     private var confirmationTitle: String {
@@ -158,6 +202,36 @@ struct CleanupView: View {
     }
 }
 
+// MARK: - Category Visual Style
+
+private enum CategoryStyle {
+    static func symbol(for category: CleanupCategoryID) -> String {
+        switch category {
+        case .userCaches: "internaldrive.fill"
+        case .logs: "doc.text.fill"
+        case .browserCaches: "globe"
+        case .developer: "hammer.fill"
+        case .oldDownloads: "arrow.down.circle.fill"
+        case .trash: "trash.fill"
+        }
+    }
+
+    static func colors(for category: CleanupCategoryID) -> [Color] {
+        switch category {
+        case .userCaches: [Color(hex: 0x34D399), Color(hex: 0x0D9488)]
+        case .logs: [Color(hex: 0x38BDF8), Color(hex: 0x0284C7)]
+        case .browserCaches: [Color(hex: 0x60A5FA), Color(hex: 0x2563EB)]
+        case .developer: [Color(hex: 0xA78BFA), Color(hex: 0x6366F1)]
+        case .oldDownloads: [Color(hex: 0xFBBF24), Color(hex: 0xEA580C)]
+        case .trash: [Color(hex: 0xFB7185), Color(hex: 0xE11D48)]
+        }
+    }
+
+    static func color(for category: CleanupCategoryID) -> Color {
+        colors(for: category).first ?? Palette.keelGreen
+    }
+}
+
 // MARK: - Rows
 
 private struct CategoryRow: View {
@@ -165,33 +239,40 @@ private struct CategoryRow: View {
     let appNames: [String: String]
     @Binding var isSelected: Bool
     @State private var expanded = false
+    @State private var isHovered = false
 
     private var isEmpty: Bool { result.items.isEmpty }
     private var isUnreadable: Bool { isEmpty && !result.unreadableRoots.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 16) {
+            HStack(spacing: 14) {
                 Toggle("", isOn: $isSelected)
                     .toggleStyle(.checkbox)
                     .labelsHidden()
                     .disabled(isEmpty)
                     .accessibilityLabel(result.category.title)
 
-                CategoryBadge(category: result.category.id)
+                IconMedallion(
+                    symbol: CategoryStyle.symbol(for: result.category.id),
+                    colors: CategoryStyle.colors(for: result.category.id),
+                    size: 38,
+                    symbolScale: 0.45,
+                    filled: !isEmpty
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(result.category.title)
                         .font(.keel(15, .bold))
                         .foregroundStyle(Palette.text)
                     Text(detailText)
-                        .font(.keel(13, .medium))
+                        .font(.keel(12.5, .medium))
                         .foregroundStyle(result.category.removal == .deletePermanently ? Palette.warningText : Palette.slate)
                         .fixedSize(horizontal: false, vertical: true)
                     if let note = skipNote {
                         Text(note)
-                            .font(.keel(13, .semibold))
-                            .foregroundStyle(Palette.slate)
+                            .font(.keel(12, .semibold))
+                            .foregroundStyle(Palette.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -199,41 +280,40 @@ private struct CategoryRow: View {
                 Spacer(minLength: 12)
 
                 if isUnreadable {
-                    Text("Erişim yok")
-                        .font(.keel(14, .bold))
-                        .foregroundStyle(Palette.warningText)
+                    Pill(text: "Erişim yok", background: Palette.warningTint, foreground: Palette.warningText)
                         .help("Bu klasörü okumak için Tam Disk Erişimi gerekiyor")
                 } else if isEmpty {
-                    Text("Temiz")
-                        .font(.keel(14, .bold))
-                        .foregroundStyle(Palette.mintText)
+                    Pill(text: "Temiz", background: Palette.mint, foreground: Palette.mintText)
                 } else {
                     ByteAmount(bytes: result.totalBytes, size: 15)
                     Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                        withAnimation(.easeInOut(duration: 0.16)) { expanded.toggle() }
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                             .foregroundStyle(Palette.slate)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                            .frame(width: 34, height: 34)
+                            .background(Palette.mist, in: Circle())
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(expanded ? "Ayrıntıları gizle" : "Neyin silineceğini göster")
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 18)
             .padding(.vertical, 12)
-            .frame(minHeight: 68)
+            .frame(minHeight: 62)
+            .background(isHovered && !isEmpty ? Color.white.opacity(0.03) : .clear)
+            .onHover { isHovered = $0 }
 
             if expanded {
                 ItemList(items: result.items)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 16)
             }
         }
-        .opacity(isEmpty && !isUnreadable ? 0.6 : 1)
+        .opacity(isEmpty && !isUnreadable ? 0.65 : 1)
     }
 
     private var detailText: String {
@@ -289,60 +369,69 @@ private struct ItemList: View {
     }
 }
 
-private struct CategoryBadge: View {
-    let category: CleanupCategoryID
-
-    var body: some View {
-        Text(label)
-            .font(.keel(13, .extraBold))
-            .foregroundStyle(Palette.text)
-            .frame(width: 40, height: 40)
-            .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .accessibilityHidden(true)
-    }
-
-    private var label: String {
-        switch category {
-        case .userCaches: "ÖB"
-        case .logs: "GK"
-        case .browserCaches: "TR"
-        case .developer: "XC"
-        case .oldDownloads: "İN"
-        case .trash: "ÇK"
-        }
-    }
-
-    private var tint: Color {
-        switch category {
-        case .userCaches, .trash: Palette.mint
-        case .logs, .browserCaches: Color(hex: 0x4FD8F5).opacity(0.18)
-        case .developer: Color(hex: 0xA08BFF).opacity(0.2)
-        case .oldDownloads: Palette.warningTint
-        }
-    }
-}
-
 // MARK: - States and banners
 
+/// CleanMyMac-style inviting centered idle stage for Cleanup.
 private struct IdleCard: View {
     let scan: @MainActor () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Henüz taranmadı")
-                .font(.keel(20, .extraBold))
-                .foregroundStyle(Palette.text)
-            Text("Tarama yalnızca okur; neyin ne kadar yer kapladığını gösterir. Silme için ayrıca onayın istenir.")
-                .font(.keel(15, .medium))
-                .foregroundStyle(Palette.slate)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(action: scan) {
-                Label("Taramayı başlat", systemImage: "magnifyingglass")
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(hex: 0x38BDF8).opacity(0.24), .clear],
+                            center: .center,
+                            startRadius: 12,
+                            endRadius: 68
+                        )
+                    )
+                    .frame(width: 136, height: 136)
+                Mascot(character: .puf, size: 70)
             }
-            .buttonStyle(.keelPrimary)
+
+            VStack(spacing: 6) {
+                Text("Sistem Gereksizlerini Tara")
+                    .font(.keel(22, .extraBold))
+                    .tracking(-0.4)
+                    .foregroundStyle(Palette.text)
+                Text("Önbellekleri, eski günlükleri, tarayıcı artıklarını ve geliştirici verilerini güvenle ölçer. Silme için ayrıca onayın istenir.")
+                    .font(.keel(13.5, .medium))
+                    .foregroundStyle(Palette.slate)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 480)
+            }
+
+            Button(action: scan) {
+                Label("Taramayı Başlat", systemImage: "magnifyingglass")
+            }
+            .buttonStyle(.keelHeroPill(colors: [Color(hex: 0x38BDF8), Color(hex: 0x0EA5E9)]))
             .padding(.top, 4)
+
+            HStack(spacing: 18) {
+                badge("trash", "Çöp Kutusu'na taşınır")
+                badge("shield.lefthalf.filled", "Açık uygulamalar korunur")
+                badge("arrow.uturn.backward.circle", "Geri alınabilir")
+            }
+            .padding(.top, 6)
         }
-        .keelCard(padding: 28, radius: 20)
+        .padding(.vertical, 34)
+        .padding(.horizontal, 28)
+        .frame(maxWidth: .infinity)
+        .keelCard(padding: 0, radius: 22)
+    }
+
+    private func badge(_ symbol: String, _ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x38BDF8))
+            Text(text)
+                .font(.keel(12, .semibold))
+                .foregroundStyle(Palette.slate)
+        }
     }
 }
 
@@ -353,18 +442,18 @@ private struct ScanningCard: View {
         HStack(spacing: 16) {
             ProgressView().controlSize(.regular)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Taranıyor…")
+                Text("Kategoriler taranıyor…")
                     .font(.keel(17, .extraBold))
                     .foregroundStyle(Palette.text)
-                Text("Önbellekler, günlükler ve indirmeler ölçülüyor")
-                    .font(.keel(14, .medium))
+                Text("Önbellekler, günlükler, tarayıcılar ve indirmeler ölçülüyor")
+                    .font(.keel(13.5, .medium))
                     .foregroundStyle(Palette.slate)
             }
             Spacer()
             Button("Durdur", action: cancel)
                 .buttonStyle(.keelSecondary)
         }
-        .keelCard(padding: 24, radius: 20)
+        .keelCard(padding: 24, radius: 18)
     }
 }
 
@@ -373,9 +462,12 @@ private struct FullDiskAccessBanner: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(Palette.warningText)
+            IconMedallion(
+                symbol: "lock.shield.fill",
+                colors: [Palette.warningText, Palette.warning],
+                size: 36,
+                symbolScale: 0.46
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text("Tam Disk Erişimi gerekli")
                     .font(.keel(15, .bold))
@@ -403,9 +495,12 @@ private struct ReportBanner: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: report.failed.isEmpty ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(report.failed.isEmpty ? Palette.mintText : Palette.warningText)
+            IconMedallion(
+                symbol: report.failed.isEmpty ? "checkmark" : "exclamationmark.triangle.fill",
+                colors: report.failed.isEmpty ? [Palette.keelGreen, Color(hex: 0x0D9488)] : [Palette.warningText, Palette.warning],
+                size: 34,
+                symbolScale: 0.44
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(ByteFormat.string(report.freedBytes)) temizlendi")
                     .font(.keel(15, .bold))

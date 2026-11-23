@@ -148,14 +148,14 @@ private struct SummaryTiles: View {
                 Spacer(minLength: 0)
                 Mascot(character: mascot, size: 30)
             }
-            .padding(18)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isOn ? AnyShapeStyle(Palette.summary) : AnyShapeStyle(Palette.card), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(isOn ? AnyShapeStyle(Palette.summary) : AnyShapeStyle(Palette.card), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(isOn ? Color.white.opacity(0.18) : Palette.border)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(isOn ? Palette.summaryBorder : Palette.border, lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -193,10 +193,10 @@ private struct Toolbar: View {
                         model.filter = filter
                     } label: {
                         Text("\(filter.title) \(model.count(filter))")
-                            .font(.keel(13, .bold))
-                            .foregroundStyle(isOn ? Palette.onAccent : Palette.text)
-                            .padding(.horizontal, 14)
-                            .frame(height: 34)
+                            .font(.keel(12.5, .bold))
+                            .foregroundStyle(isOn ? Palette.onAccent : Palette.subtle)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
                             .background(isOn ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: Capsule())
                             .overlay { Capsule().strokeBorder(isOn ? .clear : Palette.border) }
                     }
@@ -261,8 +261,9 @@ private struct AppList: View {
             }
         }
         .padding(.vertical, 6)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.borderHighlight) }
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
         .frame(maxWidth: .infinity)
     }
 }
@@ -270,6 +271,7 @@ private struct AppList: View {
 private struct AppRow: View {
     @Environment(ApplicationsModel.self) private var model
     let entry: AppEntry
+    @State private var isHovered = false
 
     private var app: InstalledApp { entry.app }
     private var isFocused: Bool { model.focusedID == entry.id }
@@ -336,8 +338,20 @@ private struct AppRow: View {
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 60)
-        .background(isFocused ? Palette.Sidebar.selectedBackground : .clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            isFocused
+                ? Color(hex: 0x818CF8).opacity(0.16)
+                : (isHovered ? Color.white.opacity(0.04) : .clear),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .overlay {
+            if isFocused {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color(hex: 0x818CF8).opacity(0.32), lineWidth: 1)
+            }
+        }
         .padding(.horizontal, 6)
+        .onHover { isHovered = $0 }
     }
 
     private var subtitle: String {
@@ -393,8 +407,9 @@ private struct DetailPanel: View {
                 .frame(maxWidth: .infinity, minHeight: 280)
             }
         }
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.borderHighlight) }
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
     }
 }
 
