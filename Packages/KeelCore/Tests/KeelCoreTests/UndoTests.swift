@@ -48,4 +48,23 @@ struct UndoTests {
         #expect(report.failed.map(\.message) == ["Çöp Kutusu'nda değil"])
         #expect(FileManager.default.fileExists(atPath: document.path))
     }
+
+    @Test func reportsLogWriteFailureWithoutBlockingRestore() throws {
+        let sandbox = try Sandbox()
+        let original = try sandbox.write("Library/Caches/com.vendor.app/blob", bytes: 10)
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+        let landed = try #require(try remover.moveToTrash(original.deletingLastPathComponent()))
+        let blocker = try sandbox.write("log-blocker", bytes: 1)
+        let unwritableLog = ActionLog(fileURL: blocker.appendingPathComponent("actions.log"))
+
+        let report = TrashRestorer(log: unwritableLog).restore([
+            TrashedItem(original: original.deletingLastPathComponent(), inTrash: landed, bytes: 10),
+        ])
+
+        #expect(report.restored.count == 1)
+        #expect(report.failed.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: original.path))
+        let logError = try #require(report.logError)
+        #expect(logError.contains("İşlem kaydı yazılamadı (1 kayıt)"))
+    }
 }

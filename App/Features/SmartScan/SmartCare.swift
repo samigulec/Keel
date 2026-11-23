@@ -195,6 +195,7 @@ final class SmartCareModel {
     private(set) var score: Int?
     private(set) var findings: [CareFinding] = []
     private(set) var lastRun: Date?
+    private(set) var lastCleanupReport: CleanupReport?
 
     private let status: SystemStatus
     private let cleanup: CleanupModel
@@ -214,6 +215,7 @@ final class SmartCareModel {
         guard !isRunning else { return }
         isRunning = true
         finished = []
+        lastCleanupReport = nil
         Task {
             // The checks read different things, so they run side by side.
             async let cleaned: Void = runCleanup()
@@ -270,8 +272,9 @@ final class SmartCareModel {
 
     /// Cleans the recommended categories, as Temizlik would with its default selection.
     func cleanRecommended() async {
+        lastCleanupReport = nil
         cleanup.selectRecommended()
-        _ = await cleanup.cleanSelectionAndWait()
+        lastCleanupReport = await cleanup.cleanSelectionAndWait()
         evaluate()
     }
 

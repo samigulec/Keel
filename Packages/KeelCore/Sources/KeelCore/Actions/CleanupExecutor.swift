@@ -11,6 +11,10 @@ public struct CleanupReport: Sendable {
     public var failed: [Failure] = []
     /// Where trashed items landed, for undo.
     public var trashed: [TrashedItem] = []
+    /// Set when one or more entries could not be written to `actions.log`.
+    public var logError: String? = nil
+
+    public init() {}
 
     public var freedBytes: Int64 { removed.reduce(0) { $0 + $1.sizeBytes } }
 }
@@ -49,10 +53,11 @@ public struct CleanupExecutor: Sendable {
         now: @Sendable () -> Date = Date.init
     ) -> CleanupReport {
         var report = CleanupReport()
+        var logTracker = ActionLogTracker(log: log)
 
         for item in items {
             func record(_ outcome: ActionLog.Entry.Outcome, _ detail: String? = nil) {
-                try? log?.append(ActionLog.Entry(
+                logTracker.append(ActionLog.Entry(
                     date: now(),
                     removal: item.removal,
                     path: item.url.path,
@@ -94,6 +99,7 @@ public struct CleanupExecutor: Sendable {
             }
         }
 
+        report.logError = logTracker.errorSummary
         return report
     }
 

@@ -232,6 +232,8 @@ public struct LargeFilesReport: Sendable {
     public var skipped: [Outcome] = []
     public var failed: [Outcome] = []
     public var trashed: [TrashedItem] = []
+    /// Set when one or more entries could not be written to `actions.log`.
+    public var logError: String? = nil
 
     public init() {}
 
@@ -281,9 +283,10 @@ public struct LargeFileRemover: Sendable {
         now: @Sendable () -> Date = Date.init
     ) -> LargeFilesReport {
         var report = LargeFilesReport()
+        var logTracker = ActionLogTracker(log: log)
         for file in files {
             func record(_ outcome: ActionLog.Entry.Outcome, _ detail: String? = nil) {
-                try? log?.append(ActionLog.Entry(
+                logTracker.append(ActionLog.Entry(
                     date: now(), removal: .moveToTrash, path: file.url.path,
                     bytes: file.sizeBytes, outcome: outcome, detail: detail
                 ))
@@ -337,6 +340,7 @@ public struct LargeFileRemover: Sendable {
                 record(.failed, error.localizedDescription)
             }
         }
+        report.logError = logTracker.errorSummary
         return report
     }
 }

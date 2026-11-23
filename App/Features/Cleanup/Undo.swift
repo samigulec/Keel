@@ -16,6 +16,9 @@ enum Undo {
             let names = report.failed.prefix(3).map { "\($0.item.original.lastPathComponent): \($0.message)" }
             text += " Geri yüklenemeyen \(report.failed.count) öğe: " + names.joined(separator: "; ")
         }
+        if let logError = report.logError {
+            text += " " + logError
+        }
         return text
     }
 }

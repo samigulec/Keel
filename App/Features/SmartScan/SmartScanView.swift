@@ -21,6 +21,29 @@ struct SmartScanView: View {
 
             hero
 
+            if let report = care.lastCleanupReport, !report.failed.isEmpty || report.logError != nil {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Palette.warningText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !report.failed.isEmpty {
+                            Text("\(report.failed.count) öğe kaldırılamadı.")
+                                .font(.keel(14, .bold))
+                                .foregroundStyle(Palette.text)
+                        }
+                        if let logError = report.logError {
+                            Text(logError)
+                                .font(.keel(13, .semibold))
+                                .foregroundStyle(Palette.warningText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Spacer()
+                }
+                .keelCard(padding: 16, radius: 16, fill: Palette.warningTint)
+            }
+
             if care.isRunning {
                 steps
             } else if !care.findings.isEmpty {

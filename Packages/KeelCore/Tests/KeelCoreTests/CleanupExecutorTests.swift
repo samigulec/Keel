@@ -114,4 +114,25 @@ struct CleanupExecutorTests {
         #expect(report.removed.isEmpty)
         #expect(FileManager.default.fileExists(atPath: thesis.path))
     }
+
+    @Test func reportsLogWriteFailureWithoutStoppingCleanup() throws {
+        let sandbox = try Sandbox()
+        let first = try sandbox.write("Library/Caches/com.one.app/a", bytes: 1_000)
+        let second = try sandbox.write("Library/Caches/com.two.app/b", bytes: 1_000)
+        let blocker = try sandbox.write("log-blocker", bytes: 1)
+        let unwritableLog = ActionLog(fileURL: blocker.appendingPathComponent("actions.log"))
+        let remover = try RecordingRemover(bin: sandbox.outside.appendingPathComponent("bin"))
+
+        let report = CleanupExecutor(
+            policy: sandbox.policy,
+            trashDirectory: sandbox.home.appendingPathComponent(".Trash"),
+            remover: remover,
+            log: unwritableLog
+        ).perform([item(first), item(second)])
+
+        #expect(report.removed.count == 2)
+        #expect(report.failed.isEmpty)
+        let logError = try #require(report.logError)
+        #expect(logError.contains("İşlem kaydı yazılamadı (2 kayıt)"))
+    }
 }

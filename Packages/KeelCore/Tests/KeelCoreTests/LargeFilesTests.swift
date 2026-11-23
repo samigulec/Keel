@@ -124,4 +124,24 @@ struct LargeFilesTests {
         #expect(AppDataLocation(area: "Group Containers", owner: "group.com.docker").belongs(toAnyOf: ["com.docker"], names: []))
         #expect(!AppDataLocation(area: "Containers", owner: "com.docker.docker").belongs(toAnyOf: ["com.docker.cli"], names: ["docker desktop"]))
     }
+
+    @Test func reportsLogWriteFailureWithoutStoppingLargeFileRemoval() throws {
+        let sandbox = try Sandbox()
+        let movie = try sandbox.write("Downloads/movie.mov", bytes: 5_000)
+        let blocker = try sandbox.write("log-blocker", bytes: 1)
+        let unwritableLog = ActionLog(fileURL: blocker.appendingPathComponent("actions.log"))
+        let remover = try RecordingRemover(bin: sandbox.home.appendingPathComponent(".Trash"))
+
+        let report = LargeFileRemover(
+            home: sandbox.home,
+            policy: LargeFileRemover.policy(home: sandbox.home),
+            remover: remover,
+            log: unwritableLog
+        ).perform([LargeFile(url: movie, sizeBytes: 5_000, lastActivity: nil, kind: .video)])
+
+        #expect(report.removed.map(\.url) == [movie])
+        #expect(report.failed.isEmpty)
+        let logError = try #require(report.logError)
+        #expect(logError.contains("İşlem kaydı yazılamadı (1 kayıt)"))
+    }
 }

@@ -35,6 +35,8 @@ public struct UninstallReport: Sendable {
     public var removedApps: [InstalledApp] = []
     /// Where trashed items landed, for undo.
     public var trashed: [TrashedItem] = []
+    /// Set when one or more entries could not be written to `actions.log`.
+    public var logError: String? = nil
 
     public init() {}
 }
@@ -123,6 +125,7 @@ public struct Uninstaller: Sendable {
     /// so are its files, since it may be writing them.
     public func perform(_ plans: [UninstallPlan], runningBundleIDs: Set<String> = [], now: @Sendable () -> Date = Date.init) -> UninstallReport {
         var report = UninstallReport()
+        var logTracker = ActionLogTracker(log: log)
         let running = Set(runningBundleIDs.map { $0.lowercased() })
 
         for plan in plans {
@@ -140,7 +143,7 @@ public struct Uninstaller: Sendable {
 
             for target in targets {
                 func record(_ outcome: ActionLog.Entry.Outcome, _ detail: String? = nil) {
-                    try? log?.append(ActionLog.Entry(
+                    logTracker.append(ActionLog.Entry(
                         date: now(), removal: .moveToTrash, path: target.url.path,
                         bytes: target.bytes, outcome: outcome, detail: detail
                     ))
@@ -164,6 +167,7 @@ public struct Uninstaller: Sendable {
                 }
             }
         }
+        report.logError = logTracker.errorSummary
         return report
     }
 }

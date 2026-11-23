@@ -31,9 +31,10 @@ struct CleanupView: View {
                 }
             }
             if let restore = model.lastRestore {
-                Label(Undo.summary(restore), systemImage: restore.failed.isEmpty ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill")
+                let restoreClean = restore.failed.isEmpty && restore.logError == nil
+                Label(Undo.summary(restore), systemImage: restoreClean ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill")
                     .font(.keel(14, .semibold))
-                    .foregroundStyle(restore.failed.isEmpty ? Palette.mintText : Palette.warningText)
+                    .foregroundStyle(restoreClean ? Palette.mintText : Palette.warningText)
                     .fixedSize(horizontal: false, vertical: true)
                     .keelCard(padding: 16, radius: 16)
             }
@@ -401,11 +402,13 @@ private struct ReportBanner: View {
     let report: CleanupReport
     let undo: () -> Void
 
+    private var hasProblem: Bool { !report.failed.isEmpty || report.logError != nil }
+
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: report.failed.isEmpty ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            Image(systemName: hasProblem ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .font(.system(size: 22))
-                .foregroundStyle(report.failed.isEmpty ? Palette.mintText : Palette.warningText)
+                .foregroundStyle(hasProblem ? Palette.warningText : Palette.mintText)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(ByteFormat.string(report.freedBytes)) temizlendi")
                     .font(.keel(15, .bold))
@@ -413,6 +416,12 @@ private struct ReportBanner: View {
                 Text(detail)
                     .font(.keel(13, .medium))
                     .foregroundStyle(Palette.slate)
+                if let logError = report.logError {
+                    Text(logError)
+                        .font(.keel(12, .semibold))
+                        .foregroundStyle(Palette.warningText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
             if !report.trashed.isEmpty {

@@ -21,6 +21,8 @@ public struct RestoreReport: Sendable {
 
     public var restored: [TrashedItem] = []
     public var failed: [Failure] = []
+    /// Set when one or more entries could not be written to `actions.log`.
+    public var logError: String? = nil
 
     public init() {}
 
@@ -39,12 +41,13 @@ public struct TrashRestorer: Sendable {
 
     public func restore(_ items: [TrashedItem], now: @Sendable () -> Date = Date.init) -> RestoreReport {
         var report = RestoreReport()
+        var logTracker = ActionLogTracker(log: log)
         let files = FileManager.default
 
         for item in items {
             func fail(_ message: String) {
                 report.failed.append(.init(item: item, message: message))
-                try? log?.append(ActionLog.Entry(
+                logTracker.append(ActionLog.Entry(
                     date: now(), removal: .moveToTrash, path: item.original.path,
                     bytes: item.bytes, outcome: .failed, detail: "undo: \(message)"
                 ))
@@ -66,7 +69,7 @@ public struct TrashRestorer: Sendable {
                 try files.createDirectory(at: item.original.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try files.moveItem(at: item.inTrash, to: item.original)
                 report.restored.append(item)
-                try? log?.append(ActionLog.Entry(
+                logTracker.append(ActionLog.Entry(
                     date: now(), removal: .moveToTrash, path: item.original.path,
                     bytes: item.bytes, outcome: .restored
                 ))
@@ -74,6 +77,7 @@ public struct TrashRestorer: Sendable {
                 fail(error.localizedDescription)
             }
         }
+        report.logError = logTracker.errorSummary
         return report
     }
 

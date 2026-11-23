@@ -68,3 +68,30 @@ public struct ActionLog: Sendable {
             .map { try decoder.decode(Entry.self, from: Data($0.utf8)) }
     }
 }
+
+/// Collects log-write failures during a batch without interrupting the file
+/// operation itself, producing one concise summary message for the report.
+struct ActionLogTracker {
+    let log: ActionLog?
+    private(set) var failedCount = 0
+    private(set) var firstMessage: String?
+
+    init(log: ActionLog?) {
+        self.log = log
+    }
+
+    mutating func append(_ entry: ActionLog.Entry) {
+        guard let log else { return }
+        do {
+            try log.append(entry)
+        } catch {
+            failedCount += 1
+            if firstMessage == nil { firstMessage = error.localizedDescription }
+        }
+    }
+
+    var errorSummary: String? {
+        guard failedCount > 0, let firstMessage else { return nil }
+        return "İşlem kaydı yazılamadı (\(failedCount) kayıt): \(firstMessage)"
+    }
+}

@@ -26,9 +26,10 @@ struct LargeFilesView: View {
                 }
             }
             if let restore = model.lastRestore {
-                Label(Undo.summary(restore), systemImage: restore.failed.isEmpty ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill")
+                let restoreClean = restore.failed.isEmpty && restore.logError == nil
+                Label(Undo.summary(restore), systemImage: restoreClean ? "arrow.uturn.backward.circle.fill" : "exclamationmark.triangle.fill")
                     .font(.keel(14, .semibold))
-                    .foregroundStyle(restore.failed.isEmpty ? Palette.mintText : Palette.warningText)
+                    .foregroundStyle(restoreClean ? Palette.mintText : Palette.warningText)
                     .fixedSize(horizontal: false, vertical: true)
                     .keelCard(padding: 16, radius: 16)
             }
@@ -318,7 +319,7 @@ private struct RemovalBanner: View {
     let report: LargeFilesReport
     let undo: () -> Void
 
-    private var clean: Bool { report.failed.isEmpty && report.skipped.isEmpty }
+    private var clean: Bool { report.failed.isEmpty && report.skipped.isEmpty && report.logError == nil }
 
     /// One line per file that was not moved, and why.
     private var lines: [String] {
@@ -338,6 +339,12 @@ private struct RemovalBanner: View {
                     Text(line)
                         .font(.keel(12, .medium))
                         .foregroundStyle(Palette.slate)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let logError = report.logError {
+                    Text(logError)
+                        .font(.keel(12, .semibold))
+                        .foregroundStyle(Palette.warningText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

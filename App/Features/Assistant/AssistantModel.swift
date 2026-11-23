@@ -408,7 +408,7 @@ final class AssistantModel {
         Task {
             let report = await Undo.restore(trashed)
             undoneProposals.insert(id)
-            items.append(ChatItem(kind: .notice(isError: !report.failed.isEmpty), text: Undo.summary(report)))
+            items.append(ChatItem(kind: .notice(isError: !report.failed.isEmpty || report.logError != nil), text: Undo.summary(report)))
             cleanup.scan()
         }
     }
@@ -460,6 +460,9 @@ final class AssistantModel {
         }
         if !lines.isEmpty {
             items.append(ChatItem(kind: .notice(isError: report.removed.isEmpty), text: lines.joined(separator: "\n")))
+        }
+        if let logError = report.logError {
+            items.append(ChatItem(kind: .notice(isError: true), text: logError))
         }
     }
 

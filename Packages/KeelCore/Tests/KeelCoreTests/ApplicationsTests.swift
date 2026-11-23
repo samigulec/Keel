@@ -202,4 +202,23 @@ struct ApplicationsTests {
 
         #expect(sandbox.uninstallPolicy().evaluateApp(app) == .denied("bir kısayol"))
     }
+
+    @Test func reportsLogWriteFailureWithoutStoppingUninstall() throws {
+        let sandbox = try Sandbox()
+        let app = try #require(AppInventory.read(try sandbox.app("Applications/Editor.app", bundleID: "com.vendor.editor")))
+        try sandbox.write("Library/Caches/com.vendor.editor/blob", bytes: 500)
+        let files = AppLeftoverFinder(home: sandbox.home, installedBundleIDs: ["com.vendor.editor"]).relatedFiles(for: app)
+        let remover = try RecordingRemover(bin: sandbox.outside.appendingPathComponent("bin"))
+        let blocker = try sandbox.write("log-blocker", bytes: 1)
+        let unwritableLog = ActionLog(fileURL: blocker.appendingPathComponent("actions.log"))
+
+        let report = Uninstaller(policy: sandbox.uninstallPolicy(), remover: remover, log: unwritableLog)
+            .perform([UninstallPlan(app: app, removesApp: true, files: files, appSizeBytes: 1_000)])
+
+        #expect(report.removedApps.count == 1)
+        #expect(report.removed.count == 2)
+        #expect(report.failed.isEmpty)
+        let logError = try #require(report.logError)
+        #expect(logError.contains("İşlem kaydı yazılamadı (2 kayıt)"))
+    }
 }
