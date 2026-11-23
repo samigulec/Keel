@@ -179,4 +179,43 @@ struct SafetyPolicyTests {
             #expect(!policy.evaluate(URL(fileURLWithPath: path)).isAllowed, "\(path)")
         }
     }
+
+    @Test func deniesItemOnDifferentVolume() throws {
+        let sandbox = try Sandbox()
+        let file = try sandbox.file("Library/Caches/com.example.app/mounted.dat")
+        let root = SafetyPolicy.canonicalPath(sandbox.home.appendingPathComponent("Library/Caches"))
+        let policy = SafetyPolicy(
+            allowedRoots: SafetyPolicy.standardAllowedRoots(home: sandbox.home),
+            protectedRoots: SafetyPolicy.standardProtectedRoots(home: sandbox.home),
+            deviceIDProvider: { path, _ in
+                path == root ? 1 : 2
+            }
+        )
+        #expect(policy.evaluate(file) == .denied(.differentVolume))
+    }
+
+    @Test func allowsItemOnSameInjectedVolume() throws {
+        let sandbox = try Sandbox()
+        let file = try sandbox.file("Library/Caches/com.example.app/local.dat")
+        let policy = SafetyPolicy(
+            allowedRoots: SafetyPolicy.standardAllowedRoots(home: sandbox.home),
+            protectedRoots: SafetyPolicy.standardProtectedRoots(home: sandbox.home),
+            deviceIDProvider: { _, _ in 42 }
+        )
+        #expect(policy.evaluate(file) == .allowed)
+    }
+
+    @Test func deniesDifferentVolumeWhenRootDeviceIsUnreadable() throws {
+        let sandbox = try Sandbox()
+        let file = try sandbox.file("Library/Caches/com.example.app/orphan.dat")
+        let root = SafetyPolicy.canonicalPath(sandbox.home.appendingPathComponent("Library/Caches"))
+        let policy = SafetyPolicy(
+            allowedRoots: SafetyPolicy.standardAllowedRoots(home: sandbox.home),
+            protectedRoots: SafetyPolicy.standardProtectedRoots(home: sandbox.home),
+            deviceIDProvider: { path, _ in
+                path == root ? nil : 7
+            }
+        )
+        #expect(policy.evaluate(file) == .denied(.differentVolume))
+    }
 }

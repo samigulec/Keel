@@ -96,17 +96,18 @@ final class PerformanceModel {
     /// The last problem switching a service or a login item.
     private(set) var startupMessage: String?
 
-    /// Turns background services off or back on and returns the problems;
+    /// Turns background services off or back on and returns the structured outcome;
     /// system services ask for an administrator's password first.
     @discardableResult
-    func setLaunchItems(_ items: [LaunchItem], enabled: Bool) async -> [String] {
+    func setLaunchItems(_ items: [LaunchItem], enabled: Bool) async -> LaunchSwitchOutcome {
         let ids = Set(items.map(\.id))
         switchingItems.formUnion(ids)
-        let problems = await SystemControl.setLaunchItems(items, enabled: enabled)
+        let outcome = await SystemControl.setLaunchItems(items, enabled: enabled)
+        let problems = outcome.allProblems
         startupMessage = problems.isEmpty ? nil : problems.joined(separator: "\n")
         await refreshLaunchItems()
         switchingItems.subtract(ids)
-        return problems
+        return outcome
     }
 
     /// Apps in "Open at Login". Reading them needs permission to use System
