@@ -10,32 +10,44 @@ struct MenuBarContent: View {
     private static let networkOutColor = Color(hex: 0xA08BFF)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                KeelLogoTile(size: 26)
+                KeelLogoTile(size: 22)
                 Text("Keel")
-                    .font(.keel(17, .extraBold))
+                    .font(.keel(14.5, .extraBold))
+                    .tracking(-0.2)
                     .foregroundStyle(Palette.text)
+                Spacer()
+                if let temp = status.thermals?.summary(.cpu)?.hottest ?? status.thermals?.summaries.map(\.hottest).max() {
+                    Text(Thermal.degrees(temp))
+                        .font(.keelMono(11, .semibold))
+                        .foregroundStyle(Thermal.color(temp))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Thermal.color(temp).opacity(0.14), in: Capsule())
+                }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            Divider().overlay(Palette.divider)
+
+            VStack(alignment: .leading, spacing: 5) {
                 StatRow(title: "İşlemci", fraction: status.cpuUsage) {
                     Text(status.cpuUsage.map { "%\(Int(($0 * 100).rounded()))" } ?? "—")
-                        .font(.keelMono(13, .semibold))
+                        .font(.keelMono(12.5, .semibold))
                         .foregroundStyle(Palette.text)
                 }
                 Sparkline(values: status.cpuHistory, height: 20)
                 Text("son 1 dk")
                     .font(.keel(10, .medium))
-                    .foregroundStyle(Palette.slate)
+                    .foregroundStyle(Palette.muted)
             }
             StatRow(title: "Bellek", fraction: status.memory?.usedFraction) {
-                ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 13, base: .binary)
+                ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 12.5, base: .binary)
             }
             StatRow(title: "Disk", fraction: status.disk?.usedFraction) {
-                ByteAmount(bytes: status.disk?.availableBytes, size: 13)
+                ByteAmount(bytes: status.disk?.availableBytes, size: 12.5)
                 Text("boş")
-                    .font(.keel(13, .semibold))
+                    .font(.keel(12, .semibold))
                     .foregroundStyle(Palette.slate)
             }
 
@@ -44,18 +56,18 @@ struct MenuBarContent: View {
                     Text("Sıcaklık").eyebrowStyle()
                     Spacer()
                     Text(thermalText(hottest, fans: thermals.fans))
-                        .font(.keelMono(12, .semibold))
+                        .font(.keelMono(11.5, .semibold))
                         .foregroundStyle(Thermal.color(hottest))
                 }
                 .accessibilityElement(children: .combine)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 4) {
                     Text("Ağ").eyebrowStyle()
                     Spacer()
                     Text(networkText)
-                        .font(.keelMono(12, .semibold))
+                        .font(.keelMono(11.5, .semibold))
                         .foregroundStyle(Palette.text)
                 }
                 .accessibilityElement(children: .combine)
@@ -67,25 +79,24 @@ struct MenuBarContent: View {
                 }
                 Text("son 1 dk")
                     .font(.keel(10, .medium))
-                    .foregroundStyle(Palette.slate)
+                    .foregroundStyle(Palette.muted)
             }
 
-            Divider()
+            Divider().overlay(Palette.divider)
 
-            Button("Keel'i aç") {
-                openWindow(id: KeelApp.mainWindowID)
-                NSApp.activate()
-            }
-            .buttonStyle(.keelPrimary)
-            .frame(maxWidth: .infinity)
-
-            Button("Çıkış") { NSApp.terminate(nil) }
-                .buttonStyle(.plain)
-                .font(.keel(13, .semibold))
-                .foregroundStyle(Palette.slate)
+            HStack(spacing: 8) {
+                Button("Keel'i aç") {
+                    openWindow(id: KeelApp.mainWindowID)
+                    NSApp.activate()
+                }
+                .buttonStyle(.keelPrimary)
                 .frame(maxWidth: .infinity)
+
+                Button("Çıkış") { NSApp.terminate(nil) }
+                    .buttonStyle(.keelSecondary)
+            }
         }
-        .padding(16)
+        .padding(14)
         .frame(width: 260)
         .background(Palette.raised)
         .preferredColorScheme(.dark)

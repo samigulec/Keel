@@ -148,14 +148,14 @@ private struct SummaryTiles: View {
                 Spacer(minLength: 0)
                 Mascot(character: mascot, size: 30)
             }
-            .padding(18)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isOn ? AnyShapeStyle(Palette.summary) : AnyShapeStyle(Palette.card), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(isOn ? AnyShapeStyle(Palette.summary) : AnyShapeStyle(Palette.card), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(isOn ? Color.white.opacity(0.18) : Palette.border)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(isOn ? Palette.summaryBorder : Palette.border, lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -193,10 +193,10 @@ private struct Toolbar: View {
                         model.filter = filter
                     } label: {
                         Text("\(filter.title) \(model.count(filter))")
-                            .font(.keel(13, .bold))
-                            .foregroundStyle(isOn ? Palette.onAccent : Palette.text)
-                            .padding(.horizontal, 14)
-                            .frame(height: 34)
+                            .font(.keel(12.5, .bold))
+                            .foregroundStyle(isOn ? Palette.onAccent : Palette.subtle)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
                             .background(isOn ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: Capsule())
                             .overlay { Capsule().strokeBorder(isOn ? .clear : Palette.border) }
                     }

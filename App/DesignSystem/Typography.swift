@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Manrope for UI text, JetBrains Mono for numbers. Both ship in
+/// Manrope for UI text, JetBrains Mono for metrics. Both ship in
 /// Resources/Fonts and are registered through ATSApplicationFontsPath.
 enum KeelWeight: String {
     case medium = "Manrope-Medium"
@@ -20,15 +20,15 @@ extension Font {
     }
 
     static func keelMono(_ size: CGFloat, _ weight: KeelMonoWeight = .semibold) -> Font {
-        .custom(weight.rawValue, size: size)
+        .custom(weight.rawValue, size: size).monospacedDigit()
     }
 }
 
 extension View {
-    /// Small uppercase label used above stat values ("DEPOLAMA").
+    /// Crisp uppercase micro-label used above stat values and sidebar groups.
     func eyebrowStyle(color: Color = Palette.slate) -> some View {
-        font(.keel(12, .bold))
-            .tracking(0.8)
+        font(.keel(11, .bold))
+            .tracking(0.85)
             .textCase(.uppercase)
             .foregroundStyle(color)
     }

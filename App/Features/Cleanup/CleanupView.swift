@@ -92,28 +92,28 @@ struct CleanupView: View {
                 }
             }
         }
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.border) }
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.borderHighlight) }
         .disabled(model.phase == .cleaning)
     }
 
     // MARK: - Summary
 
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Seçilen").eyebrowStyle(color: Palette.Sidebar.eyebrow)
-            ByteAmount(bytes: model.selectedBytes, size: 44, color: .white)
+            ByteAmount(bytes: model.selectedBytes, size: 36, color: .white)
             Text("\(model.selectedResults.count) kategori seçili")
-                .font(.keel(14, .medium))
+                .font(.keel(13, .medium))
                 .foregroundStyle(Palette.Sidebar.text)
             ProgressBar(
                 fraction: model.totalBytes > 0 ? Double(model.selectedBytes) / Double(model.totalBytes) : 0,
                 track: Palette.Sidebar.widgetTrack,
-                height: 10
+                height: 7
             )
             if let disk = status.disk {
                 Text("Temizlik sonrası boş alan yaklaşık **\(ByteFormat.string(disk.availableBytes + model.selectedBytes))** olacak.")
-                    .font(.keel(13, .medium))
+                    .font(.keel(12.5, .medium))
                     .foregroundStyle(Palette.Sidebar.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -132,12 +132,12 @@ struct CleanupView: View {
 
             Button("Yeniden tara", action: model.scan)
                 .buttonStyle(.plain)
-                .font(.keel(14, .bold))
+                .font(.keel(13, .bold))
                 .foregroundStyle(Palette.Sidebar.eyebrow)
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 34)
                 .disabled(model.isBusy)
         }
-        .keelSummaryCard(padding: 28, radius: 24)
+        .keelSummaryCard(padding: 22, radius: 16)
     }
 
     private var confirmationTitle: String {
@@ -223,9 +223,9 @@ private struct CategoryRow: View {
                     .accessibilityLabel(expanded ? "Ayrıntıları gizle" : "Neyin silineceğini göster")
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            .frame(minHeight: 68)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .frame(minHeight: 58)
 
             if expanded {
                 ItemList(items: result.items)

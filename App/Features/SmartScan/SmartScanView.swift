@@ -49,27 +49,27 @@ struct SmartScanView: View {
     // MARK: Hero
 
     private var hero: some View {
-        HStack(alignment: .center, spacing: 36) {
+        HStack(alignment: .center, spacing: 28) {
             ScoreRing(score: care.score, isRunning: care.isRunning, progress: Double(care.finished.count) / Double(SmartCareModel.Step.allCases.count))
-                .frame(width: 168, height: 168)
+                .frame(width: 136, height: 136)
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
                 if let lastRun = care.lastRun, !care.isRunning {
                     Pill(text: "Son tarama: \(lastRun.formatted(date: .omitted, time: .shortened))")
                 } else if care.isRunning {
                     Pill(text: "Taranıyor…", background: Palette.track, foreground: Palette.slate)
                 }
                 Text(headline)
-                    .font(.keel(26, .extraBold))
+                    .font(.keel(21, .extraBold))
                     .tracking(-0.4)
                     .foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Tarama yalnızca okur. Hiçbir şey sen onaylamadan silinmez; silinenler Çöp Kutusu'na gider ve geri alınabilir.")
-                    .font(.keel(15, .medium))
+                    .font(.keel(13.5, .medium))
                     .foregroundStyle(Palette.slate)
-                    .lineSpacing(3)
+                    .lineSpacing(2.5)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     if care.lastRun != nil, !care.isRunning, care.recommendedBytes >= 100_000_000 {
                         Button("Önerilenleri temizle (\(ByteFormat.string(care.recommendedBytes)))") { confirmingClean = true }
                             .buttonStyle(.keelPrimary)
@@ -86,7 +86,7 @@ struct SmartScanView: View {
                 .padding(.top, 4)
             }
         }
-        .keelCard(padding: 32, radius: 24)
+        .keelCard(padding: 24, radius: 18)
     }
 
     private var headline: String {
@@ -154,43 +154,70 @@ struct SmartScanView: View {
     // MARK: Live cards
 
     private var storageCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Depolama").eyebrowStyle()
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                ByteAmount(bytes: status.disk?.availableBytes, size: 26)
-                Text("boş")
-                    .font(.keel(15, .semibold))
-                    .foregroundStyle(Palette.slate)
+        Button { navigate(.cleanup) } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Depolama").eyebrowStyle()
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Palette.muted)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    ByteAmount(bytes: status.disk?.availableBytes, size: 22)
+                    Text("boş")
+                        .font(.keel(13, .semibold))
+                        .foregroundStyle(Palette.slate)
+                }
+                ProgressBar(fraction: status.disk?.usedFraction ?? 0, tint: (status.disk?.usedFraction ?? 0) > 0.9 ? Palette.warning : nil)
             }
-            ProgressBar(fraction: status.disk?.usedFraction ?? 0, tint: (status.disk?.usedFraction ?? 0) > 0.9 ? Palette.warning : nil)
+            .keelCard(padding: 18, radius: 16)
         }
-        .keelCard(padding: 22)
+        .buttonStyle(.plain)
     }
 
     private var memoryCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Bellek (RAM)").eyebrowStyle()
-            ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 26, base: .binary)
-            Text(status.memory.map(memoryDetail) ?? "Ölçülüyor…")
-                .font(.keel(13, .medium))
-                .foregroundStyle(Palette.slate)
+        Button { navigate(.performance) } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Bellek (RAM)").eyebrowStyle()
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Palette.muted)
+                }
+                ByteAmount(bytes: status.memory.map { Int64($0.usedBytes) }, size: 22, base: .binary)
+                Text(status.memory.map(memoryDetail) ?? "Ölçülüyor…")
+                    .font(.keel(12.5, .medium))
+                    .foregroundStyle(Palette.slate)
+            }
+            .keelCard(padding: 18, radius: 16)
         }
-        .keelCard(padding: 22)
+        .buttonStyle(.plain)
     }
 
     private var temperatureCard: some View {
         let cpu = status.thermals?.summary(.cpu)?.hottest ?? status.thermals?.summaries.map(\.hottest).max()
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("Sıcaklık").eyebrowStyle(color: Palette.Sidebar.eyebrow)
-            Text(cpu.map(Thermal.degrees) ?? "—")
-                .font(.keelMono(26, .semibold))
-                .tracking(-1.5)
-                .foregroundStyle(Palette.text)
-            Text(cpu.map { "İşlemci · \(Thermal.state($0).lowercased())" } ?? "Sensörler okunuyor…")
-                .font(.keel(13, .medium))
-                .foregroundStyle(Palette.Sidebar.text)
+        return Button { navigate(.performance) } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Sıcaklık").eyebrowStyle()
+                    Spacer()
+                    if let cpu {
+                        Circle().fill(Thermal.color(cpu)).frame(width: 7, height: 7)
+                    }
+                }
+                Text(cpu.map(Thermal.degrees) ?? "—")
+                    .font(.keelMono(22, .semibold))
+                    .tracking(-1)
+                    .foregroundStyle(Palette.text)
+                Text(cpu.map { "İşlemci · \(Thermal.state($0).lowercased())" } ?? "Sensörler okunuyor…")
+                    .font(.keel(12.5, .medium))
+                    .foregroundStyle(Palette.slate)
+            }
+            .keelCard(padding: 18, radius: 16)
         }
-        .keelSummaryCard(padding: 22)
+        .buttonStyle(.plain)
     }
 
     private func memoryDetail(_ memory: MemorySnapshot) -> String {
@@ -212,27 +239,28 @@ private struct ScoreRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(Palette.track, lineWidth: 14)
+            Circle().stroke(Palette.track, lineWidth: 11)
             Circle()
                 .trim(from: 0, to: isRunning ? max(progress, 0.04) : Double(score ?? 0) / 100)
-                .stroke(isRunning ? AnyShapeStyle(Palette.accentBar) : AnyShapeStyle(color), style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                .stroke(isRunning ? AnyShapeStyle(Palette.accentBar) : AnyShapeStyle(color), style: StrokeStyle(lineWidth: 11, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .shadow(color: (isRunning ? Palette.keelGreen : color).opacity(0.35), radius: 8)
                 .animation(.easeOut(duration: 0.5), value: progress)
                 .animation(.easeOut(duration: 0.8), value: score)
             if isRunning {
-                ProgressView().controlSize(.large)
+                ProgressView().controlSize(.regular)
             } else if let score {
                 VStack(spacing: 0) {
                     Text("\(score)")
-                        .font(.keelMono(46, .semibold))
-                        .tracking(-2)
+                        .font(.keelMono(38, .semibold))
+                        .tracking(-1.8)
                         .foregroundStyle(Palette.text)
                     Text("sağlık")
-                        .font(.keel(13, .bold))
+                        .font(.keel(11.5, .bold))
                         .foregroundStyle(Palette.slate)
                 }
             } else {
-                Mascot(character: .kee, size: 84)
+                Mascot(character: .kee, size: 58)
             }
         }
         .accessibilityElement()

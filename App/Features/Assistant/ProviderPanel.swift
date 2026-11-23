@@ -237,7 +237,7 @@ private struct StatusLine: View {
     }
 }
 
-/// Small square-cornered action buttons under a provider card.
+/// Small desktop-proportioned inline action button with crisp hover feedback.
 struct TileButtonStyle: ButtonStyle {
     enum Tone { case normal, danger }
 
@@ -245,21 +245,48 @@ struct TileButtonStyle: ButtonStyle {
     var tone: Tone = .normal
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.keel(12, .bold))
-            .foregroundStyle(prominent ? Palette.onAccent : (tone == .danger ? Palette.danger : Palette.text))
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 11)
-            .frame(height: 30)
-            .background(prominent ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                if !prominent {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Palette.border)
+        TileButtonBody(configuration: configuration, prominent: prominent, tone: tone)
+    }
+
+    private struct TileButtonBody: View {
+        let configuration: Configuration
+        let prominent: Bool
+        let tone: Tone
+        @State private var isHovered = false
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .font(.keel(12, .bold))
+                .foregroundStyle(prominent ? Palette.onAccent : (tone == .danger ? Palette.danger : Palette.text))
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 11)
+                .frame(height: 28)
+                .background(background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: 1)
                 }
-            }
-            .opacity(configuration.isPressed ? 0.75 : 1)
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .brightness(prominent && isHovered ? 0.05 : 0)
+                .scaleEffect(configuration.isPressed ? 0.98 : 1)
+                .opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.42)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onHover { isHovered = $0 }
+                .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+
+        private var background: AnyShapeStyle {
+            if prominent { return AnyShapeStyle(Palette.accent) }
+            if tone == .danger { return AnyShapeStyle(isHovered ? Palette.danger.opacity(0.22) : Palette.dangerTint) }
+            return AnyShapeStyle(isHovered ? Palette.mistHover : Palette.mist)
+        }
+
+        private var borderColor: Color {
+            if prominent { return Color.white.opacity(isHovered ? 0.35 : 0.16) }
+            if tone == .danger { return Palette.danger.opacity(isHovered ? 0.4 : 0.25) }
+            return isHovered ? Color.white.opacity(0.18) : Palette.border
+        }
     }
 }
 

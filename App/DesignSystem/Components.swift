@@ -16,13 +16,16 @@ struct CardModifier: ViewModifier {
             .overlay {
                 if fill == Palette.card {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .strokeBorder(Palette.border)
+                        .strokeBorder(Palette.borderHighlight, lineWidth: 1)
+                } else {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Palette.border, lineWidth: 1)
                 }
             }
     }
 }
 
-/// The highlighted panel: teal to blue, raised off the ground.
+/// Highlighted summary panel: deep emerald-slate surface with a refined emerald hairline.
 struct SummaryCardModifier: ViewModifier {
     var padding: CGFloat
     var radius: CGFloat
@@ -34,77 +37,101 @@ struct SummaryCardModifier: ViewModifier {
             .background(Palette.summary, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18))
+                    .strokeBorder(Palette.summaryBorder, lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.35), radius: 30, y: 18)
+            .shadow(color: .black.opacity(0.28), radius: 18, y: 10)
     }
 }
 
 extension View {
-    func keelCard(padding: CGFloat = 24, radius: CGFloat = 22, fill: Color = Palette.card) -> some View {
+    func keelCard(padding: CGFloat = 20, radius: CGFloat = 16, fill: Color = Palette.card) -> some View {
         modifier(CardModifier(padding: padding, radius: radius, fill: fill))
     }
 
-    func keelSummaryCard(padding: CGFloat = 24, radius: CGFloat = 22) -> some View {
+    func keelSummaryCard(padding: CGFloat = 20, radius: CGFloat = 16) -> some View {
         modifier(SummaryCardModifier(padding: padding, radius: radius))
     }
 }
 
 // MARK: - Buttons
 
-/// Dims a button when it is disabled; ButtonStyle cannot read the environment itself.
-private struct EnabledAware<Content: View>: View {
+/// Dims a button when disabled and tracks pointer hover for crisp desktop feedback.
+private struct InteractiveButtonShell<Content: View>: View {
     @Environment(\.isEnabled) private var isEnabled
-    @ViewBuilder var content: Content
+    @State private var isHovered = false
+    @ViewBuilder var content: (_ isHovered: Bool) -> Content
 
     var body: some View {
-        content.opacity(isEnabled ? 1 : 0.45)
+        content(isHovered && isEnabled)
+            .opacity(isEnabled ? 1 : 0.42)
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
 
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        EnabledAware {
+        InteractiveButtonShell { hovered in
             configuration.label
-                .font(.keel(16, .extraBold))
+                .font(.keel(13.5, .bold))
                 .foregroundStyle(Palette.onAccent)
-                .padding(.horizontal, 28)
-                .frame(minHeight: 52)
-                .background(Palette.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: Palette.keelGreen.opacity(0.35), radius: 14, y: 8)
-                .opacity(configuration.isPressed ? 0.85 : 1)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 36)
+                .background(Palette.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(hovered ? 0.35 : 0.18), lineWidth: 1)
+                }
+                .brightness(hovered ? 0.05 : 0)
+                .shadow(color: Palette.keelGreen.opacity(hovered ? 0.28 : 0.16), radius: 10, y: 4)
+                .scaleEffect(configuration.isPressed ? 0.985 : 1)
+                .opacity(configuration.isPressed ? 0.9 : 1)
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 }
 
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        EnabledAware {
+        InteractiveButtonShell { hovered in
             configuration.label
-                .font(.keel(16, .bold))
+                .font(.keel(13.5, .semibold))
                 .foregroundStyle(Palette.text)
-                .padding(.horizontal, 22)
-                .frame(minHeight: 52)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 15)
+                .frame(minHeight: 36)
+                .background(
+                    hovered ? Palette.mistHover : Palette.mist,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.controlBorder)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(hovered ? Color.white.opacity(0.20) : Palette.controlBorder, lineWidth: 1)
                 }
+                .scaleEffect(configuration.isPressed ? 0.985 : 1)
                 .opacity(configuration.isPressed ? 0.85 : 1)
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 }
 
-/// The full-width accent button on summary panels, e.g. "Temizle".
+/// Full-width primary action button inside summary panels (e.g. "Temizle").
 struct AccentButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        EnabledAware {
+        InteractiveButtonShell { hovered in
             configuration.label
-                .font(.keel(17, .extraBold))
+                .font(.keel(14.5, .bold))
                 .foregroundStyle(Palette.onAccent)
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .background(Palette.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: Palette.keelGreen.opacity(0.4), radius: 15, y: 12)
-                .opacity(configuration.isPressed ? 0.85 : 1)
+                .frame(maxWidth: .infinity, minHeight: 42)
+                .background(Palette.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(Color.white.opacity(hovered ? 0.35 : 0.18), lineWidth: 1)
+                }
+                .brightness(hovered ? 0.05 : 0)
+                .shadow(color: Palette.keelGreen.opacity(hovered ? 0.30 : 0.18), radius: 12, y: 5)
+                .scaleEffect(configuration.isPressed ? 0.99 : 1)
+                .opacity(configuration.isPressed ? 0.9 : 1)
+                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
     }
 }
@@ -125,10 +152,10 @@ extension ButtonStyle where Self == SecondaryButtonStyle {
 
 struct ProgressBar: View {
     var fraction: Double
-    /// nil, or Keel Green, draws the mint-to-cyan accent.
+    /// nil, or Keel Green, draws the emerald-to-sky accent.
     var tint: Color? = nil
     var track: Color = Palette.track
-    var height: CGFloat = 8
+    var height: CGFloat = 6
 
     var body: some View {
         GeometryReader { proxy in
@@ -179,8 +206,7 @@ struct Sparkline: View {
     }
 }
 
-/// A byte count as the design sets it: the number in JetBrains Mono, the unit
-/// in Manrope, so monospaced spacing does not leave a wide gap before "GB".
+/// A byte count formatted with tabular JetBrains Mono digits and Manrope units.
 struct ByteAmount: View {
     var bytes: Int64?
     var size: CGFloat
@@ -190,10 +216,9 @@ struct ByteAmount: View {
     var body: some View {
         if let bytes {
             let parts = ByteFormat.parts(bytes, base: base)
-            HStack(alignment: .firstTextBaseline, spacing: size * 0.18) {
-                // Monospaced digits leave a wide gap around the comma at large sizes.
-                Text(parts.value).font(.keelMono(size, .semibold)).tracking(-size * 0.06)
-                Text(parts.unit).font(.keel(size * 0.8, .bold))
+            HStack(alignment: .firstTextBaseline, spacing: size * 0.16) {
+                Text(parts.value).font(.keelMono(size, .semibold)).tracking(-size * 0.05)
+                Text(parts.unit).font(.keel(size * 0.78, .bold))
             }
             .foregroundStyle(color)
             .accessibilityElement(children: .combine)
@@ -210,11 +235,32 @@ struct Pill: View {
 
     var body: some View {
         Text(text)
-            .font(.keel(12, .extraBold))
+            .font(.keel(11, .bold))
             .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3.5)
             .background(background, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(foreground.opacity(0.22), lineWidth: 1)
+            }
+    }
+}
+
+/// Subtle keyboard shortcut badge (`⌘K`, `⌘1`) for desktop polish.
+struct ShortcutCap: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.keelMono(10.5, .medium))
+            .foregroundStyle(Palette.muted)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            }
     }
 }
 
@@ -225,24 +271,20 @@ struct PageHeader: View {
     var subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.keel(36, .bold))
-                .tracking(-1)
+                .font(.keel(24, .extraBold))
+                .tracking(-0.5)
                 .foregroundStyle(Palette.text)
             Text(subtitle)
-                .font(.keel(16, .medium))
-                .foregroundStyle(Palette.subtle)
+                .font(.keel(13.5, .medium))
+                .foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 }
 
-// MARK: - Responsive layout
-
+/// Narrow content area, e.g. when the Keel AI companion panel is open beside it.
 extension EnvironmentValues {
-    /// True when the content area is narrow, e.g. beside the Keel AI panel
-    /// or in a small window; screens stack their columns then.
     @Entry var compactLayout = false
 }

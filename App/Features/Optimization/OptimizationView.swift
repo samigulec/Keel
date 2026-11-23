@@ -102,14 +102,14 @@ struct OptimizationView: View {
                 Spacer(minLength: 0)
                 if !compact { Mascot(character: mascot, size: 30) }
             }
-            .padding(18)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isOn ? AnyShapeStyle(Palette.summary) : AnyShapeStyle(Palette.card), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(isOn ? AnyShapeStyle(Palette.summary) : AnyShapeStyle(Palette.card), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(isOn ? Color.white.opacity(0.18) : Palette.border)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(isOn ? Palette.summaryBorder : Palette.border, lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])

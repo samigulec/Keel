@@ -107,15 +107,15 @@ private struct PanelCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             content
         }
-        .padding(24)
+        .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(fill, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             if fill == Palette.card {
-                RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.border)
+                RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.borderHighlight)
             }
         }
     }
@@ -238,9 +238,9 @@ private struct SystemOverview: View {
                 HStack(spacing: 28) { facts(thermal: thermal).suffix }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 18)
-        .keelSummaryCard(padding: 0, radius: 24)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .keelSummaryCard(padding: 0, radius: 16)
     }
 
     private func facts(thermal: (String, Color)) -> FactList {

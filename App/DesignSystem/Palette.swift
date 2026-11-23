@@ -1,63 +1,89 @@
 import SwiftUI
 
-/// Colors from the Keel design canvas: a deep navy ground with soft teal
-/// and blue light, glass cards and mint-to-cyan accents. The window pins
-/// the dark appearance so system controls match.
+/// Refined dark obsidian-slate palette with architectural emerald accents.
+/// Pinned to dark appearance so native macOS controls stay cohesive.
 enum Palette {
     // Text
-    static let text = Color.white
-    /// Secondary text and labels.
-    static let slate = Color(hex: 0xA9C2CF)
-    /// Body copy under titles, a step brighter than labels.
-    static let subtle = Color(hex: 0xBFD3DC)
-    /// Text and marks on the bright accent gradient.
-    static let onAccent = Color(hex: 0x04121C)
+    static let text = Color(hex: 0xF1F5F9)
+    /// Secondary labels and captions.
+    static let slate = Color(hex: 0x8FA1B5)
+    /// Body copy under titles, slightly higher contrast than labels.
+    static let subtle = Color(hex: 0xCBD5E1)
+    /// Muted metadata and keyboard shortcut hints.
+    static let muted = Color(hex: 0x64748B)
+    /// High-contrast ink on bright accent buttons.
+    static let onAccent = Color(hex: 0x04130F)
 
     // Brand
-    static let keelGreen = Color(hex: 0x2FE0A0)
-    static let navy = Color(hex: 0x071423)
-    /// Light fills: chips, rows, inactive segments.
-    static let mist = Color.white.opacity(0.07)
+    static let keelGreen = Color(hex: 0x34D399)
+    static let navy = Color(hex: 0x0A0E14)
+    /// Subtle control fills: chips, segmented buttons, inline icon buttons.
+    static let mist = Color.white.opacity(0.055)
+    static let mistHover = Color.white.opacity(0.095)
 
-    // Surfaces
-    static let card = Color.white.opacity(0.06)
-    static let border = Color.white.opacity(0.10)
-    static let controlBorder = Color.white.opacity(0.16)
-    static let divider = Color.white.opacity(0.08)
-    static let track = Color.white.opacity(0.12)
-    /// Opaque surface for menus and windows without the ground behind them.
-    static let raised = Color(hex: 0x0D2135)
+    // Surfaces (3-tier elevation)
+    static let card = Color(hex: 0x111722).opacity(0.92)
+    static let cardHover = Color(hex: 0x161E2C)
+    static let border = Color.white.opacity(0.085)
+    static let borderHighlight = LinearGradient(
+        colors: [Color.white.opacity(0.14), Color.white.opacity(0.04)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+    static let controlBorder = Color.white.opacity(0.13)
+    static let divider = Color.white.opacity(0.065)
+    static let track = Color.white.opacity(0.09)
+    /// Opaque elevated surface for popovers, menus, and sheets.
+    static let raised = Color(hex: 0x131A26)
 
-    // Tints
-    static let mint = Color(hex: 0x2FE0A0).opacity(0.16)
-    static let mintText = Color(hex: 0x7EF0C8)
-    static let warning = Color(hex: 0xF0A23B)
-    static let warningText = Color(hex: 0xFFC46B)
-    static let warningTint = Color(hex: 0xFFC46B).opacity(0.16)
-    static let danger = Color(hex: 0xFF8A80)
-    static let info = Color(hex: 0x4FD8F5)
+    // Semantic tints
+    static let mint = Color(hex: 0x34D399).opacity(0.13)
+    static let mintText = Color(hex: 0x6EE7B7)
+    static let warning = Color(hex: 0xF59E0B)
+    static let warningText = Color(hex: 0xFBBF24)
+    static let warningTint = Color(hex: 0xF59E0B).opacity(0.13)
+    static let danger = Color(hex: 0xF87171)
+    static let dangerTint = Color(hex: 0xF87171).opacity(0.13)
+    static let info = Color(hex: 0x38BDF8)
 
-    // Gradients
-    static let accent = LinearGradient(colors: [Color(hex: 0x5FF5C0), Color(hex: 0x22C7E8)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let accentBar = LinearGradient(colors: [Color(hex: 0x5FF5C0), Color(hex: 0x4FD8F5)], startPoint: .leading, endPoint: .trailing)
-    /// Keel AI's own color.
-    static let assistant = LinearGradient(colors: [Color(hex: 0xA08BFF), Color(hex: 0x4C8DF6)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    /// Highlighted summary panels, e.g. what a cleanup will free.
-    static let summary = LinearGradient(colors: [Color(hex: 0x0B6E6A), Color(hex: 0x1B4F9C)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    // Gradients (restrained, desktop-native)
+    static let accent = LinearGradient(
+        colors: [Color(hex: 0x34D399), Color(hex: 0x14B8A6)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let accentBar = LinearGradient(
+        colors: [Color(hex: 0x34D399), Color(hex: 0x38BDF8)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+    /// Keel AI signature violet-indigo gradient.
+    static let assistant = LinearGradient(
+        colors: [Color(hex: 0x8B5CF6), Color(hex: 0x6366F1)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    /// Subtle highlighted summary panels — calm emerald-slate, never loud neon.
+    static let summary = LinearGradient(
+        colors: [Color(hex: 0x0F2625), Color(hex: 0x111C2B)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let summaryBorder = Color(hex: 0x34D399).opacity(0.26)
 
-    // Text and tracks on the highlighted summary panels
     enum Sidebar {
-        static let text = Color(hex: 0xD6E4EA)
-        static let selectedBackground = Color.white.opacity(0.10)
-        static let selectedBorder = Color.white.opacity(0.14)
-        static let background = Color.white.opacity(0.04)
-        static let widgetBackground = Color.white.opacity(0.06)
-        static let widgetTrack = Color.white.opacity(0.18)
-        static let eyebrow = Color(hex: 0xC9F5E6)
+        static let text = Color(hex: 0xCBD5E1)
+        static let selectedBackground = Color(hex: 0x34D399).opacity(0.12)
+        static let selectedBorder = Color(hex: 0x34D399).opacity(0.24)
+        static let hoverBackground = Color.white.opacity(0.05)
+        static let background = Color(hex: 0x0D121B).opacity(0.92)
+        static let widgetBackground = Color.white.opacity(0.04)
+        static let widgetTrack = Color.white.opacity(0.11)
+        static let eyebrow = Color(hex: 0x6EE7B7)
     }
 }
 
-/// The window's ground: navy with teal and blue light from opposite corners.
+/// Calm obsidian-slate canvas with whisper-subtle atmospheric depth.
 struct KeelBackground: View {
     var body: some View {
         GeometryReader { proxy in
@@ -65,16 +91,16 @@ struct KeelBackground: View {
             ZStack {
                 Palette.navy
                 RadialGradient(
-                    colors: [Color(hex: 0x12407F), Color(hex: 0x12407F).opacity(0)],
-                    center: UnitPoint(x: 0.8, y: -0.1),
-                    startRadius: 0,
-                    endRadius: max(size.width, size.height) * 0.6
-                )
-                RadialGradient(
-                    colors: [Color(hex: 0x0F5C5A), Color(hex: 0x0F5C5A).opacity(0)],
-                    center: UnitPoint(x: 0, y: 1.1),
+                    colors: [Color(hex: 0x1E3A5F).opacity(0.22), .clear],
+                    center: UnitPoint(x: 0.85, y: -0.05),
                     startRadius: 0,
                     endRadius: max(size.width, size.height) * 0.55
+                )
+                RadialGradient(
+                    colors: [Color(hex: 0x0F4C46).opacity(0.18), .clear],
+                    center: UnitPoint(x: 0.05, y: 1.05),
+                    startRadius: 0,
+                    endRadius: max(size.width, size.height) * 0.5
                 )
             }
         }

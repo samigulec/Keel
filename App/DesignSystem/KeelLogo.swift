@@ -37,25 +37,24 @@ struct KeelLogoShape: Shape {
     }
 }
 
-/// The mark on a Keel Green tile, as used in the sidebar.
+/// The architectural emerald Keel emblem tile.
 struct KeelLogoTile: View {
-    var size: CGFloat = 36
+    var size: CGFloat = 30
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-            .fill(LinearGradient(colors: [Color(hex: 0x5FF5C0), Color(hex: 0x1BA7D6)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+            .fill(LinearGradient(colors: [Color(hex: 0x34D399), Color(hex: 0x0D9488)], startPoint: .topLeading, endPoint: .bottomTrailing))
             .frame(width: size, height: size)
             .overlay {
-                // The glossy top edge from the design.
-                RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .top, endPoint: .center), lineWidth: 1)
+                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.45), .clear], startPoint: .top, endPoint: .bottom), lineWidth: 1)
             }
             .overlay {
                 KeelLogoShape()
                     .fill(Palette.onAccent)
                     .padding(size * 0.17)
             }
-            .shadow(color: Palette.keelGreen.opacity(0.35), radius: size * 0.25, y: size * 0.12)
+            .shadow(color: Palette.keelGreen.opacity(0.24), radius: size * 0.22, y: size * 0.08)
             .accessibilityHidden(true)
     }
 }

@@ -59,10 +59,9 @@ struct CompanionPanel: View {
         }
         .padding(16)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Palette.navy.opacity(0.55))
-        .background(Color.white.opacity(0.03))
+        .background(Color(hex: 0x0C111A).opacity(0.96))
         .overlay(alignment: .leading) {
-            Rectangle().fill(Palette.border).frame(width: 1)
+            Rectangle().fill(Palette.divider).frame(width: 1)
         }
     }
 

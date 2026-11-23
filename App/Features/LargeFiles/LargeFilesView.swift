@@ -150,9 +150,9 @@ private struct TileSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         if highlighted {
-            content.keelSummaryCard(padding: 18, radius: 20)
+            content.keelSummaryCard(padding: 16, radius: 16)
         } else {
-            content.keelCard(padding: 18, radius: 20)
+            content.keelCard(padding: 16, radius: 16)
         }
     }
 }
@@ -198,10 +198,10 @@ private struct Filters: View {
             model.kind = kind
         } label: {
             Text("\(title) \(model.count(kind))")
-                .font(.keel(13, .bold))
-                .foregroundStyle(isOn ? Palette.onAccent : Palette.text)
-                .padding(.horizontal, 14)
-                .frame(height: 34)
+                .font(.keel(12.5, .bold))
+                .foregroundStyle(isOn ? Palette.onAccent : Palette.subtle)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
                 .background(isOn ? AnyShapeStyle(Palette.accent) : AnyShapeStyle(Palette.mist), in: Capsule())
                 .overlay { Capsule().strokeBorder(isOn ? .clear : Palette.border) }
         }
