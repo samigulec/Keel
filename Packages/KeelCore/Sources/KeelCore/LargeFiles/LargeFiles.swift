@@ -97,10 +97,16 @@ public struct LargeFileScanner: Sendable {
     /// Keel scans or is Apple's own data. Links are resolved on both sides
     /// (on macOS /var is /private/var).
     public static func appDataLocation(of url: URL, home: URL) -> AppDataLocation? {
-        let library = home.appendingPathComponent("Library", isDirectory: true).resolvingSymlinksInPath().pathComponents
-        let parts = url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).pathComponents
-        guard parts.count > library.count + 2, Array(parts.prefix(library.count)) == library else { return nil }
-        return location(area: parts[library.count], owner: parts[library.count + 1])
+        let realLibrary = SafetyPolicy.canonicalPath(home.appendingPathComponent("Library", isDirectory: true))
+        let lexical = url.standardizedFileURL
+        let resolvedParent = SafetyPolicy.realPath(lexical.deletingLastPathComponent().path)
+            ?? SafetyPolicy.canonicalPath(lexical.deletingLastPathComponent())
+        let resolvedPath = SafetyPolicy.join(resolvedParent, lexical.lastPathComponent)
+        guard SafetyPolicy.isSameOrDescendant(resolvedPath, of: realLibrary) else { return nil }
+        let libraryParts = SafetyPolicy.components(of: realLibrary)
+        let parts = SafetyPolicy.components(of: resolvedPath)
+        guard parts.count > libraryParts.count + 2 else { return nil }
+        return location(area: parts[libraryParts.count], owner: parts[libraryParts.count + 1])
     }
 
     /// The owner folder `owner` in `area`, unless Keel leaves it alone.
@@ -115,13 +121,40 @@ public struct LargeFileScanner: Sendable {
         return AppDataLocation(area: area, owner: owner)
     }
 
-    /// Folders that are one document to the user (apps, Photos and Music
-    /// libraries, projects); never looked into, even where macOS does not
-    /// mark them as packages.
+    /// Folders that are one document, VM, library, or bundle to the user;
+    /// never looked into or deleted from inside, even where macOS does not
+    /// mark them as packages (e.g. owning app not installed) or on Linux.
     static let packageExtensions: Set<String> = [
         "app", "photoslibrary", "musiclibrary", "tvlibrary", "imovielibrary", "fcpbundle", "logicx", "band",
         "bundle", "framework", "plugin", "xcarchive", "sparsebundle", "photolibrary", "aplibrary", "lrdata",
+        "rtfd", "vmwarevm", "pvm", "scriv", "sketch", "xcodeproj", "xcworkspace", "playground",
+        "appex", "kext", "xpc", "prefpane", "qlgenerator", "mdimporter", "saver",
+        "pages", "numbers", "key", "pkg", "mpkg", "utm",
     ]
+
+    /// True when `url` is a directory carrying bundle metadata (`Info.plist`).
+    static func hasBundleInfoPlist(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path)
+            || fm.fileExists(atPath: url.appendingPathComponent("Info.plist").path)
+    }
+
+    /// True when `url` is a real directory that represents a single package.
+    /// Regular files and symlinks always return false. On macOS, `isPackageKey`
+    /// is combined with `packageExtensions`; on Linux (`swift-corelibs-foundation`),
+    /// `isPackageKey` is avoided because it flags any directory containing a dot.
+    public static func isPackage(_ url: URL) -> Bool {
+        #if os(macOS)
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]),
+              values.isDirectory == true, values.isSymbolicLink != true else { return false }
+        if values.isPackage == true { return true }
+        return packageExtensions.contains(url.pathExtension.lowercased())
+        #else
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+              values.isDirectory == true, values.isSymbolicLink != true else { return false }
+        return packageExtensions.contains(url.pathExtension.lowercased()) || hasBundleInfoPlist(url)
+        #endif
+    }
 
     public init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -161,21 +194,33 @@ public struct LargeFileScanner: Sendable {
         let protected = Set(SafetyPolicy.standardProtectedRoots(home: home).map(\.standardizedFileURL.path))
 
         var found: [(url: URL, size: Int64, appData: AppDataLocation?)] = []
+        #if os(macOS)
+        let enumeratorKeys = keys + [.isDirectoryKey, .isPackageKey]
+        let enumeratorOptions: FileManager.DirectoryEnumerationOptions = [.skipsHiddenFiles, .skipsPackageDescendants]
+        #else
+        let enumeratorKeys = keys + [.isDirectoryKey]
+        let enumeratorOptions: FileManager.DirectoryEnumerationOptions = [.skipsHiddenFiles]
+        #endif
         for (folder, appData) in roots {
             if isCancelled() { break }
-            if Self.packageExtensions.contains(folder.pathExtension.lowercased()) { continue }
+            if appData == nil {
+                if Self.isPackage(folder) { continue }
+            } else {
+                // App data owner folders (e.g. com.example.app) are ordinary folders
+                // unless they are genuine bundles containing Info.plist.
+                if Self.hasBundleInfoPlist(folder) { continue }
+            }
             var candidates: [URL] = []
             if (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
                 guard let enumerator = FileManager.default.enumerator(
                     at: folder,
-                    includingPropertiesForKeys: keys + [.isDirectoryKey],
-                    options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                    includingPropertiesForKeys: enumeratorKeys,
+                    options: enumeratorOptions,
                     errorHandler: { _, _ in true }
                 ) else { continue }
                 while let url = enumerator.nextObject() as? URL {
                     if isCancelled() { break }
-                    if Self.packageExtensions.contains(url.pathExtension.lowercased()),
-                       (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                    if Self.isPackage(url) {
                         enumerator.skipDescendants()
                         continue
                     }
@@ -300,11 +345,58 @@ public struct LargeFileRemover: Sendable {
                 continue
             }
             // Judge where it really is, with links in its folders resolved.
-            let realHome = home.resolvingSymlinksInPath()
-            let resolved = file.url.deletingLastPathComponent().resolvingSymlinksInPath()
-                .appendingPathComponent(file.url.lastPathComponent)
-            if resolved.path.hasPrefix(realHome.appendingPathComponent("Library").path + "/") {
-                guard let location = LargeFileScanner.appDataLocation(of: resolved, home: realHome) else {
+            let realHome = SafetyPolicy.canonicalPath(home)
+            let lexical = file.url.standardizedFileURL
+            guard let resolvedParent = SafetyPolicy.realPath(lexical.deletingLastPathComponent().path) else {
+                report.missing.append(file)
+                record(.skipped, "already gone")
+                continue
+            }
+            let resolvedPath = SafetyPolicy.join(resolvedParent, lexical.lastPathComponent)
+            guard SafetyPolicy.isSameOrDescendant(resolvedPath, of: realHome), resolvedPath != realHome else {
+                report.skipped.append(.init(url: file.url, message: "ev klasörünün dışında"))
+                record(.skipped, "outside home folder")
+                continue
+            }
+            let values = try? file.url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
+                report.skipped.append(.init(url: file.url, message: "artık bir dosya değil"))
+                record(.skipped, "not a regular file")
+                continue
+            }
+
+            let homeComponents = SafetyPolicy.components(of: realHome)
+            let relative = Array(SafetyPolicy.components(of: resolvedPath).dropFirst(homeComponents.count))
+            var isHiddenPath = false
+            var walkPath = realHome
+            for (index, component) in relative.enumerated() {
+                walkPath = SafetyPolicy.join(walkPath, component)
+                if component.hasPrefix(".") {
+                    isHiddenPath = true
+                    break
+                }
+                #if os(macOS)
+                // ~/Library itself carries UF_HIDDEN on macOS; its descendants are still checked.
+                if !(index == 0 && component == "Library") {
+                    let componentURL = URL(fileURLWithPath: walkPath)
+                    if (try? componentURL.resourceValues(forKeys: [.isHiddenKey]))?.isHidden == true {
+                        isHiddenPath = true
+                        break
+                    }
+                }
+                #endif
+            }
+            if isHiddenPath {
+                report.skipped.append(.init(url: file.url, message: "gizli klasör ya da dosya"))
+                record(.skipped, "hidden folder or file")
+                continue
+            }
+
+            let resolved = URL(fileURLWithPath: resolvedPath)
+            let realLibrary = SafetyPolicy.join(realHome, "Library")
+            let inLibrary = SafetyPolicy.isSameOrDescendant(resolvedPath, of: realLibrary)
+            if inLibrary {
+                guard let location = LargeFileScanner.appDataLocation(of: resolved, home: URL(fileURLWithPath: realHome, isDirectory: true)) else {
                     report.skipped.append(.init(url: file.url, message: "Library'nin korunan bir yerinde"))
                     record(.skipped, "protected part of Library")
                     continue
@@ -320,10 +412,30 @@ public struct LargeFileRemover: Sendable {
                     continue
                 }
             }
-            let values = try? file.url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
-                report.skipped.append(.init(url: file.url, message: "artık bir dosya değil"))
-                record(.skipped, "not a regular file")
+
+            var insidePackage = false
+            var ancestorPath = realHome
+            for index in 0..<max(relative.count - 1, 0) {
+                ancestorPath = SafetyPolicy.join(ancestorPath, relative[index])
+                let ancestorURL = URL(fileURLWithPath: ancestorPath, isDirectory: true)
+                if inLibrary {
+                    if index < 2 { continue }
+                    if index == 2 {
+                        if LargeFileScanner.hasBundleInfoPlist(ancestorURL) {
+                            insidePackage = true
+                            break
+                        }
+                        continue
+                    }
+                }
+                if LargeFileScanner.isPackage(ancestorURL) {
+                    insidePackage = true
+                    break
+                }
+            }
+            if insidePackage {
+                report.skipped.append(.init(url: file.url, message: "bir paketin içinde; tek dosya silinirse paket bozulur"))
+                record(.skipped, "inside a package")
                 continue
             }
             do {
