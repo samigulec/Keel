@@ -176,10 +176,8 @@ final class AssistantModel {
         isRunning = true
         let chat = chatID
         var prompt = screen.map { "\($0.note)\n\n\(message)" } ?? message
-        if let transcript = restoredTranscript {
-            prompt = "<previous_conversation>\n\(transcript)\n</previous_conversation>\n\n" + prompt
-            restoredTranscript = nil
-        }
+        prompt = ChatTranscript.applying(restoredTranscript, to: prompt)
+        restoredTranscript = nil
         runTask = Task {
             do {
                 let session = try await currentSession()
@@ -368,7 +366,8 @@ final class AssistantModel {
         }
         savedChatID = chat.id
         savedChatCreated = chat.createdAt
-        restoredTranscript = ChatStore.transcript(chat.messages)
+        let transcript = ChatStore.transcript(chat.messages)
+        restoredTranscript = transcript.isEmpty ? nil : transcript
     }
 
     func deleteAllChats() {
